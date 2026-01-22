@@ -193,6 +193,21 @@
     </head>
     <body>
         <div class="container">
+            <div style="text-align: right; margin-bottom: 10px">
+                <span style="color: #666; margin-right: 10px">
+                    👤 {{ user.username }}
+                </span>
+                <a
+                    href="{{ url_for('auth.logout') }}"
+                    style="
+                        color: #667eea;
+                        text-decoration: none;
+                        font-weight: 500;
+                    "
+                >
+                    Cerrar Sesión
+                </a>
+            </div>
             <h1>🚛 Certificado Sanitario de Vehículo</h1>
             <p class="subtitle">
                 Municipio de Itagüí - Secretaría de Salud y Protección Social

@@ -1,16 +1,27 @@
-# Entornos virtuales
-venv/
-.env
+# Base de datos local
+*.db
+instance/
 
 # Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.Python
+venv/
+env/
+*.egg-info/
 
-# Flask
-instance/
+# Archivos generados
+generados/
+temp_sin_qr.pdf
+qr_overlay.pdf
 
-# OS
-.DS_Store
-Thumbs.db
+# Secretos
+.env
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.DS_Store

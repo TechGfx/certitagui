@@ -2,107 +2,155 @@
 <html lang="es">
     <head>
         <meta charset="UTF-8" />
-        <title>Iniciar sesión</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-        <!-- Estilos simples -->
+        <title>Iniciar Sesión - Certificados Sanitarios Itagüí</title>
         <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
             body {
-                background: #0f172a;
-                font-family: system-ui, sans-serif;
+                font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
                 display: flex;
                 justify-content: center;
                 align-items: center;
-                height: 100vh;
-                color: white;
+                padding: 20px;
             }
 
-            .card {
-                background: #020617;
-                padding: 2rem;
-                border-radius: 12px;
+            .login-container {
+                background: white;
+                padding: 40px;
+                border-radius: 10px;
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+                max-width: 400px;
                 width: 100%;
-                max-width: 360px;
-                box-shadow: 0 0 30px rgba(0, 0, 0, 0.6);
             }
 
-            h1 {
+            .logo {
                 text-align: center;
-                margin-bottom: 1.5rem;
+                margin-bottom: 30px;
+            }
+
+            .logo h1 {
+                color: #333;
+                font-size: 24px;
+                margin-bottom: 5px;
+            }
+
+            .logo p {
+                color: #666;
+                font-size: 14px;
+            }
+
+            .form-group {
+                margin-bottom: 20px;
+            }
+
+            label {
+                display: block;
+                margin-bottom: 5px;
+                color: #333;
+                font-weight: 500;
             }
 
             input {
                 width: 100%;
                 padding: 12px;
-                margin-bottom: 1rem;
-                border-radius: 8px;
-                border: none;
+                border: 2px solid #e0e0e0;
+                border-radius: 5px;
+                font-size: 14px;
+                transition: border-color 0.3s;
+            }
+
+            input:focus {
                 outline: none;
-                background: #1e293b;
-                color: white;
+                border-color: #667eea;
             }
 
             button {
                 width: 100%;
-                padding: 12px;
+                padding: 15px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
                 border: none;
-                border-radius: 8px;
-                background: #38bdf8;
-                color: black;
-                font-weight: bold;
+                border-radius: 5px;
+                font-size: 16px;
+                font-weight: 600;
                 cursor: pointer;
+                transition:
+                    transform 0.2s,
+                    box-shadow 0.2s;
             }
 
             button:hover {
-                background: #0ea5e9;
+                transform: translateY(-2px);
+                box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
             }
 
-            .error {
-                color: #f87171;
-                text-align: center;
-                margin-bottom: 1rem;
+            button:active {
+                transform: translateY(0);
             }
 
-            .footer {
-                text-align: center;
-                margin-top: 1rem;
-                font-size: 0.9rem;
-                color: #94a3b8;
+            .alert {
+                padding: 12px;
+                border-radius: 5px;
+                margin-bottom: 20px;
+                font-size: 14px;
+            }
+
+            .alert-error {
+                background: #fee;
+                border: 1px solid #fcc;
+                color: #c33;
+            }
+
+            .alert-success {
+                background: #efe;
+                border: 1px solid #cfc;
+                color: #3c3;
             }
         </style>
     </head>
-
     <body>
-        <div class="card">
-            <h1>Login</h1>
-
-            <!-- Flask puede enviar mensajes de error -->
-            {% if error %}
-            <div class="error">{{ error }}</div>
-            {% endif %}
-
-            <form method="POST" action="/login">
-                <input
-                    type="email"
-                    name="email"
-                    placeholder="Correo"
-                    required
-                />
-
-                <input
-                    type="password"
-                    name="password"
-                    placeholder="Contraseña"
-                    required
-                />
-
-                <button type="submit">Entrar</button>
-            </form>
-
-            <div class="footer">
-                ¿No tienes cuenta?
-                <a href="/register" style="color: #38bdf8">Regístrate</a>
+        <div class="login-container">
+            <div class="logo">
+                <h1>🏛️ Certificados Sanitarios</h1>
+                <p>Municipio de Itagüí</p>
             </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %} {%
+            if messages %} {% for category, message in messages %}
+            <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %} {% endif %} {% endwith %}
+
+            <form method="POST" action="{{ url_for('auth.login') }}">
+                <div class="form-group">
+                    <label for="username">Usuario</label>
+                    <input
+                        type="text"
+                        id="username"
+                        name="username"
+                        required
+                        autofocus
+                    />
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Contraseña</label>
+                    <input
+                        type="password"
+                        id="password"
+                        name="password"
+                        required
+                    />
+                </div>
+
+                <button type="submit">Iniciar Sesión</button>
+            </form>
         </div>
     </body>
 </html>

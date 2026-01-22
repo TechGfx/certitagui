@@ -19,15 +19,33 @@ from auth import auth
 from models import User, db
 
 app = Flask(__name__)
-app.secret_key = "clave-super-secreta"
 
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///instance/app.db"
+# === CONFIGURACIÓN DE LA BASE DE DATOS Y SEGURIDAD ===
+# === CONFIGURACIÓN DE LA BASE DE DATOS Y SEGURIDAD ===
+
+# SECRET_KEY: obtener de variable de entorno o usar una por defecto en desarrollo
+app.secret_key = os.environ.get("SECRET_KEY", "dev-key-cambiar-en-produccion")
+
+# DATABASE_URL: configuración automática para PostgreSQL o SQLite
+database_url = os.environ.get("DATABASE_URL")
+
+if database_url:
+    # Render usa postgres:// pero SQLAlchemy necesita postgresql://
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+    app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+else:
+    # Desarrollo local con SQLite
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///app.db"
+
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db.init_app(app)
 
+# Configurar login manager
 login_manager = LoginManager()
 login_manager.login_view = "auth.login"
+login_manager.login_message = "Debes iniciar sesión para acceder a esta página"
 login_manager.init_app(app)
 
 
@@ -42,8 +60,8 @@ env = Environment(loader=FileSystemLoader("templates"), autoescape=False)
 
 Path("build").mkdir(exist_ok=True)
 
-
 os.makedirs("generados", exist_ok=True)
+os.makedirs("instance", exist_ok=True)
 
 
 def dividir_tipo_transporte(texto, palabras_linea1=2):
@@ -409,7 +427,7 @@ def publicar_certificado_web(datos_pagina1, ruta_pdf):
 @login_required
 def index():
     """Página principal con el formulario"""
-    return render_template("index.html")
+    return render_template("index.html", user=current_user)
 
 
 @app.route("/login", methods=["GET", "POST"])
