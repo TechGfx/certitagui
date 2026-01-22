@@ -7,6 +7,7 @@ from pathlib import Path
 
 import qrcode
 from flask import Flask, render_template, request, send_file
+from flask_login import LoginManager, login_required
 from jinja2 import Environment, FileSystemLoader
 from PIL import Image
 from pypdf import PdfReader, PdfWriter
@@ -14,7 +15,28 @@ from pypdf.generic import NameObject, NumberObject
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
+from auth import auth
+from models import User, db
+
 app = Flask(__name__)
+app.secret_key = "clave-super-secreta"
+
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///instance/app.db"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+db.init_app(app)
+
+login_manager = LoginManager()
+login_manager.login_view = "auth.login"
+login_manager.init_app(app)
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+
+app.register_blueprint(auth)
 
 env = Environment(loader=FileSystemLoader("templates"), autoescape=False)
 
@@ -165,7 +187,7 @@ def generar_certificado(datos):
 
         # Dividir tipo de transporte (Página 1: 2 palabras)
         tipo_dividido = dividir_tipo_transporte(
-            datos.get("tipo_transporte", ""), palabras_linea1=2
+            datos.get("tipo_transporte", ""), palabras_linea1=3
         )
 
         # Generar campos automáticos
@@ -186,6 +208,20 @@ def generar_certificado(datos):
         qr_buffer = BytesIO()
         qr_image.save(qr_buffer, format="PNG")
         qr_buffer.seek(0)
+
+        # === DETERMINAR QUÉ CHECKBOXES MARCAR ===
+        sistema_refrigeracion = datos.get("sistema_refrigeracion", "NO")
+        clase_vehiculo = datos.get("clase_vehiculo", "CAMION")
+
+        # Sistema de refrigeración
+        refri_si = "X" if sistema_refrigeracion == "SI" else ""
+        refri_no = "X" if sistema_refrigeracion == "NO" else ""
+
+        # Clase de vehículo
+        check_camioneta = "X" if clase_vehiculo == "CAMIONETA" else ""
+        check_camion = "X" if clase_vehiculo == "CAMION" else ""
+        check_moto = "X" if clase_vehiculo == "MOTO" else ""
+        check_otro = "X" if clase_vehiculo == "OTRO" else ""
 
         # PÁGINA 1 - Datos del formulario
         datos_pagina1 = {
@@ -228,6 +264,13 @@ def generar_certificado(datos):
             "fecha_acta": fecha_acta,
             # Campo "Otro" especifique
             "clase_otro_especifique": str(datos.get("clase_otro_especifique", "")),
+            # === CHECKBOXES CON X ===
+            "sistema_refrigeracion_si_check": refri_si,
+            "sistema_refrigeracion_no_check": refri_no,
+            "clase_camioneta_check": check_camioneta,
+            "clase_camion_check": check_camion,
+            "clase_moto_check": check_moto,
+            "clase_otro_check": check_otro,
         }
 
         # PÁGINA 4 - Fecha de firma
@@ -249,57 +292,8 @@ def generar_certificado(datos):
         if len(writer.pages) >= 4:
             writer.update_page_form_field_values(writer.pages[3], datos_pagina4)
 
-        # === MANEJAR RADIO BUTTONS MANUALMENTE ===
-        sistema_refrigeracion = datos.get("sistema_refrigeracion", "NO")
-        clase_vehiculo = datos.get("clase_vehiculo", "CAMION")
-
-        # Iterar sobre las anotaciones de la página 2
-        if len(writer.pages) >= 2:
-            page2 = writer.pages[1]
-            if "/Annots" in page2:
-                for annot in page2["/Annots"]:
-                    annot_obj = annot.get_object()
-
-                    # Verificar si es un botón de opción
-                    if annot_obj.get("/FT") == "/Btn":
-                        nombre = annot_obj.get("/T", "")
-
-                        # Sistema de refrigeración
-                        if "sistema_refrigeracion" in str(nombre).lower():
-                            if (
-                                "si" in str(nombre).lower()
-                                and sistema_refrigeracion == "SI"
-                            ):
-                                annot_obj.update({"/AS": "/Yes"})
-                            elif (
-                                "no" in str(nombre).lower()
-                                and sistema_refrigeracion == "NO"
-                            ):
-                                annot_obj.update({"/AS": "/Yes"})
-                            else:
-                                annot_obj.update({"/AS": "/Off"})
-
-                        # Clase de vehículo
-                        if "clase" in str(nombre).lower():
-                            nombre_lower = str(nombre).lower()
-
-                            if (
-                                "camioneta" in nombre_lower
-                                and clase_vehiculo == "CAMIONETA"
-                            ):
-                                annot_obj.update({"/AS": "/Yes"})
-                            elif (
-                                "camion" in nombre_lower
-                                and "camioneta" not in nombre_lower
-                                and clase_vehiculo == "CAMION"
-                            ):
-                                annot_obj.update({"/AS": "/Yes"})
-                            elif "moto" in nombre_lower and clase_vehiculo == "MOTO":
-                                annot_obj.update({"/AS": "/Yes"})
-                            elif "otro" in nombre_lower and clase_vehiculo == "OTRO":
-                                annot_obj.update({"/AS": "/Yes"})
-                            else:
-                                annot_obj.update({"/AS": "/Off"})
+        # === YA NO MANEJAMOS RADIO BUTTONS MANUALMENTE ===
+        # (Eliminada toda la sección anterior de radio buttons)
 
         # === INSERTAR CÓDIGO QR EN LA PÁGINA 1 ===
         # Primero guardamos el PDF con los campos rellenados
@@ -358,7 +352,7 @@ def generar_certificado(datos):
             # =========================
             publicar_certificado_web(datos_pagina1, ruta_salida)
 
-            # Limpiar archivos temporales
+        # Limpiar archivos temporales
         os.remove(temp_path)
         os.remove(qr_overlay_path)
 
@@ -412,12 +406,29 @@ def publicar_certificado_web(datos_pagina1, ruta_pdf):
 
 
 @app.route("/")
+@login_required
 def index():
     """Página principal con el formulario"""
     return render_template("index.html")
 
 
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        email = request.form["email"]
+        password = request.form["password"]
+
+        # validación (luego BD)
+        if email == "test@test.com" and password == "1234":
+            return redirect("/dashboard")
+
+        return render_template("login.html", error="Credenciales incorrectas")
+
+    return render_template("login.html")
+
+
 @app.route("/generar", methods=["POST"])
+@login_required
 def generar():
     """Procesa el formulario y genera el PDF"""
     datos = {
