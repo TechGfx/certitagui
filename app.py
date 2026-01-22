@@ -7,7 +7,13 @@ from pathlib import Path
 
 import qrcode
 from flask import Flask, render_template, request, send_file
-from flask_login import LoginManager, login_required
+from flask_login import (
+    LoginManager,
+    current_user,
+    login_required,
+    login_user,
+    logout_user,
+)
 from jinja2 import Environment, FileSystemLoader
 from PIL import Image
 from pypdf import PdfReader, PdfWriter
