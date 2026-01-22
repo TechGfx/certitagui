@@ -1,0 +1,760 @@
+<!doctype html>
+<html lang="es">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Generador de Certificados Sanitarios - Itagüí</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                padding: 20px;
+            }
+
+            .container {
+                max-width: 1000px;
+                margin: 0 auto;
+                background: white;
+                padding: 40px;
+                border-radius: 10px;
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            }
+
+            h1 {
+                color: #333;
+                margin-bottom: 10px;
+                font-size: 28px;
+            }
+
+            .subtitle {
+                color: #666;
+                margin-bottom: 30px;
+                font-size: 14px;
+            }
+
+            .section-title {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                padding: 12px 20px;
+                margin: 30px -20px 20px -20px;
+                font-weight: 600;
+                font-size: 16px;
+                border-radius: 5px;
+            }
+
+            .form-group {
+                margin-bottom: 20px;
+            }
+
+            label {
+                display: block;
+                margin-bottom: 5px;
+                color: #333;
+                font-weight: 500;
+                font-size: 14px;
+            }
+
+            label .required {
+                color: #e74c3c;
+            }
+
+            input,
+            textarea,
+            select {
+                width: 100%;
+                padding: 12px;
+                border: 2px solid #e0e0e0;
+                border-radius: 5px;
+                font-size: 14px;
+                transition: border-color 0.3s;
+            }
+
+            input:focus,
+            textarea:focus,
+            select:focus {
+                outline: none;
+                border-color: #667eea;
+            }
+
+            textarea {
+                resize: vertical;
+                min-height: 60px;
+            }
+
+            .row {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 20px;
+            }
+
+            .row-3 {
+                display: grid;
+                grid-template-columns: 1fr 1fr 1fr;
+                gap: 20px;
+            }
+
+            .radio-group {
+                display: flex;
+                gap: 20px;
+                margin-top: 8px;
+            }
+
+            .radio-option {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+
+            .radio-option input[type="radio"] {
+                width: auto;
+                margin: 0;
+                cursor: pointer;
+            }
+
+            .radio-option label {
+                margin: 0;
+                font-weight: 400;
+                cursor: pointer;
+            }
+
+            button {
+                width: 100%;
+                padding: 15px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                border: none;
+                border-radius: 5px;
+                font-size: 16px;
+                font-weight: 600;
+                cursor: pointer;
+                transition:
+                    transform 0.2s,
+                    box-shadow 0.2s;
+                margin-top: 20px;
+            }
+
+            button:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            }
+
+            button:active {
+                transform: translateY(0);
+            }
+
+            .info-box {
+                background: #f0f4ff;
+                border-left: 4px solid #667eea;
+                padding: 15px;
+                margin-bottom: 20px;
+                border-radius: 5px;
+            }
+
+            .info-box p {
+                color: #555;
+                font-size: 14px;
+                line-height: 1.6;
+                margin-bottom: 5px;
+            }
+
+            .info-box strong {
+                color: #333;
+            }
+
+            small {
+                color: #666;
+                font-size: 12px;
+                display: block;
+                margin-top: 5px;
+            }
+
+            @media (max-width: 768px) {
+                .row,
+                .row-3 {
+                    grid-template-columns: 1fr;
+                }
+
+                .container {
+                    padding: 20px;
+                }
+
+                .section-title {
+                    margin: 20px -10px 15px -10px;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🚛 Certificado Sanitario de Vehículo</h1>
+            <p class="subtitle">
+                Municipio de Itagüí - Secretaría de Salud y Protección Social
+            </p>
+
+            <div class="info-box">
+                <p><strong>📋 Campos auto-generados:</strong></p>
+                <p>• Número de acta (YYYYMMDDPLACA)</p>
+                <p>• Número de inspección (5 dígitos aleatorios + PLACA)</p>
+                <p>• Fecha del acta (de la fecha de inspección)</p>
+                <p>• Fecha de firma (formato especial en página 4)</p>
+                <p>
+                    <strong>👤 Funcionario fijo:</strong> NANCY JANETH MOSQUERA
+                    RENTERIA
+                </p>
+            </div>
+
+            <!-- TIPO DE CERTIFICADO -->
+            <div class="section-title" style="margin-top: 0">
+                🔖 Tipo de Certificado
+            </div>
+
+            <div class="form-group">
+                <label
+                    >Tipo de Certificado <span class="required">*</span></label
+                >
+                <div class="radio-group">
+                    <div class="radio-option">
+                        <input
+                            type="radio"
+                            id="tipo_nuevo"
+                            name="tipo_certificado"
+                            value="nuevo"
+                            checked
+                        />
+                        <label for="tipo_nuevo">Nuevo</label>
+                    </div>
+                    <div class="radio-option">
+                        <input
+                            type="radio"
+                            id="tipo_reno1"
+                            name="tipo_certificado"
+                            value="remo"
+                        />
+                        <label for="tipo_reno1">Primera Renovación</label>
+                    </div>
+                    <div class="radio-option">
+                        <input
+                            type="radio"
+                            id="tipo_reno2"
+                            name="tipo_certificado"
+                            value="remo2"
+                        />
+                        <label for="tipo_reno2">Segunda Renovación</label>
+                    </div>
+                    <div class="radio-option">
+                        <input
+                            type="radio"
+                            id="tipo_reno3"
+                            name="tipo_certificado"
+                            value="remo3"
+                        />
+                        <label for="tipo_reno3">Tercera Renovación</label>
+                    </div>
+                    <div class="radio-option">
+                        <input
+                            type="radio"
+                            id="tipo_reno4"
+                            name="tipo_certificado"
+                            value="remo4"
+                        />
+                        <label for="tipo_reno4">Cuarta Renovación</label>
+                    </div>
+                    <div class="radio-option">
+                        <input
+                            type="radio"
+                            id="tipo_reno5"
+                            name="tipo_certificado"
+                            value="remo5"
+                        />
+                        <label for="tipo_reno5">Quinta Renovación</label>
+                    </div>
+                </div>
+                <small
+                    >Esto generará automáticamente el link de verificación del
+                    certificado</small
+                >
+            </div>
+
+            <div class="info-box" style="margin-top: 15px">
+                <p><strong>📎 Link de verificación:</strong></p>
+                <p id="link_preview">
+                    https://itaguigov-com.us.stackstaging.com/index<strong>[PLACA]</strong>.html
+                </p>
+                <small
+                    >El link se generará automáticamente según la placa y el
+                    tipo de certificado</small
+                >
+            </div>
+
+            <script>
+                // Actualizar preview del link cuando cambia la placa o tipo
+                function updateLinkPreview() {
+                    const placa =
+                        document.getElementById("placa").value || "[PLACA]";
+                    const tipo = document.querySelector(
+                        'input[name="tipo_certificado"]:checked',
+                    ).value;
+
+                    let suffix = "";
+                    if (tipo !== "nuevo") {
+                        suffix = tipo; // remo, remo2, remo3, etc.
+                    }
+
+                    const link = `https://itaguigov-com.us.stackstaging.com/index${placa}${suffix}.html`;
+                    document.getElementById("link_preview").innerHTML = link;
+                }
+
+                // Escuchar cambios en placa y tipo de certificado
+                document.addEventListener("DOMContentLoaded", function () {
+                    document
+                        .getElementById("placa")
+                        .addEventListener("input", updateLinkPreview);
+
+                    document
+                        .querySelectorAll('input[name="tipo_certificado"]')
+                        .forEach((radio) => {
+                            radio.addEventListener("change", updateLinkPreview);
+                        });
+
+                    updateLinkPreview();
+                });
+            </script>
+
+            <form action="/generar" method="POST">
+                <!-- PÁGINA 1 -->
+                <div class="section-title">
+                    📄 PÁGINA 1 - Datos del Vehículo
+                </div>
+
+                <div class="row">
+                    <div class="form-group">
+                        <label for="placa"
+                            >Placa <span class="required">*</span></label
+                        >
+                        <input
+                            type="text"
+                            id="placa"
+                            name="placa"
+                            required
+                            placeholder="Ej: PRY576"
+                        />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="marca"
+                            >Marca <span class="required">*</span></label
+                        >
+                        <input
+                            type="text"
+                            id="marca"
+                            name="marca"
+                            required
+                            placeholder="Ej: FOTON"
+                        />
+                    </div>
+                </div>
+
+                <div class="row-3">
+                    <div class="form-group">
+                        <label for="modelo"
+                            >Modelo <span class="required">*</span></label
+                        >
+                        <input
+                            type="text"
+                            id="modelo"
+                            name="modelo"
+                            required
+                            placeholder="Ej: 2026"
+                        />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="color"
+                            >Color <span class="required">*</span></label
+                        >
+                        <input
+                            type="text"
+                            id="color"
+                            name="color"
+                            required
+                            placeholder="Ej: BLANCO"
+                        />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="capacidad"
+                            >Capacidad <span class="required">*</span></label
+                        >
+                        <input
+                            type="text"
+                            id="capacidad"
+                            name="capacidad"
+                            required
+                            placeholder="Ej: 2.4 TONELADAS"
+                        />
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="persona"
+                        >Persona (Propietario)
+                        <span class="required">*</span></label
+                    >
+                    <input
+                        type="text"
+                        id="persona"
+                        name="persona"
+                        required
+                        placeholder="Ej: WILLIAM ALEXANDER RIVERA RODRIGUEZ"
+                    />
+                </div>
+
+                <div class="row">
+                    <div class="form-group">
+                        <label for="nit"
+                            >NIT <span class="required">*</span></label
+                        >
+                        <input
+                            type="text"
+                            id="nit"
+                            name="nit"
+                            required
+                            placeholder="Ej: 1052358742"
+                        />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="codigo_verificacion"
+                            >Código de Verificación
+                            <span class="required">*</span></label
+                        >
+                        <input
+                            type="text"
+                            id="codigo_verificacion"
+                            name="codigo_verificacion"
+                            required
+                            placeholder="Ej: V-WAU2FARF89T"
+                        />
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="tipo_transporte"
+                        >Tipo de Transporte
+                        <span class="required">*</span></label
+                    >
+                    <textarea
+                        id="tipo_transporte"
+                        name="tipo_transporte"
+                        required
+                        placeholder="Ej: ALIMENTOS NO PERECEDEROS Y PRODUCTOS VARIOS"
+                    ></textarea>
+                    <small
+                        >Se dividirá automáticamente: primera palabra en línea
+                        1, resto en línea 2</small
+                    >
+                </div>
+
+                <div class="row">
+                    <div class="form-group">
+                        <label for="fecha_inspeccion"
+                            >Fecha de Inspección
+                            <span class="required">*</span></label
+                        >
+                        <input
+                            type="date"
+                            id="fecha_inspeccion"
+                            name="fecha_inspeccion"
+                            required
+                        />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="fecha_vencimiento"
+                            >Fecha de Vencimiento
+                            <span class="required">*</span></label
+                        >
+                        <input
+                            type="date"
+                            id="fecha_vencimiento"
+                            name="fecha_vencimiento"
+                            required
+                        />
+                    </div>
+                </div>
+
+                <!-- PÁGINA 2 -->
+                <div class="section-title">
+                    📄 PÁGINA 2 - Acta de Inspección
+                </div>
+
+                <div class="row">
+                    <div class="form-group">
+                        <label for="ciudad"
+                            >Ciudad (Municipio)
+                            <span class="required">*</span></label
+                        >
+                        <input
+                            type="text"
+                            id="ciudad"
+                            name="ciudad"
+                            required
+                            placeholder="Ej: BOGOTA"
+                        />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="departamento"
+                            >Departamento <span class="required">*</span></label
+                        >
+                        <input
+                            type="text"
+                            id="departamento"
+                            name="departamento"
+                            required
+                            placeholder="Ej: CUNDINAMARCA"
+                        />
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="direccion_notificacion"
+                        >Dirección de Notificación
+                        <span class="required">*</span></label
+                    >
+                    <input
+                        type="text"
+                        id="direccion_notificacion"
+                        name="direccion_notificacion"
+                        required
+                        placeholder="Ej: CRA 95A #56F-33 SUR - BOSA"
+                    />
+                </div>
+
+                <div class="row">
+                    <div class="form-group">
+                        <label for="telefono"
+                            >Teléfono <span class="required">*</span></label
+                        >
+                        <input
+                            type="tel"
+                            id="telefono"
+                            name="telefono"
+                            required
+                            placeholder="Ej: 312422205"
+                        />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="correo_electronico"
+                            >Correo Electrónico
+                            <span class="required">*</span></label
+                        >
+                        <input
+                            type="email"
+                            id="correo_electronico"
+                            name="correo_electronico"
+                            required
+                            placeholder="Ej: ejemplo@gmail.com"
+                        />
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="fecha_ultima_inspeccion"
+                        >Fecha de la Última Inspección
+                        <span class="required">*</span></label
+                    >
+                    <input
+                        type="text"
+                        id="fecha_ultima_inspeccion"
+                        name="fecha_ultima_inspeccion"
+                        required
+                        placeholder="Formato: MM/DD/YYYY (Ej: 01/20/2025)"
+                    />
+                    <small>Escribe manualmente en formato MM/DD/YYYY</small>
+                </div>
+
+                <div class="form-group">
+                    <label
+                        >Sistema de Refrigeración
+                        <span class="required">*</span></label
+                    >
+                    <div class="radio-group">
+                        <div class="radio-option">
+                            <input
+                                type="radio"
+                                id="refri_si"
+                                name="sistema_refrigeracion"
+                                value="SI"
+                            />
+                            <label for="refri_si">SI</label>
+                        </div>
+                        <div class="radio-option">
+                            <input
+                                type="radio"
+                                id="refri_no"
+                                name="sistema_refrigeracion"
+                                value="NO"
+                                checked
+                            />
+                            <label for="refri_no">NO</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label
+                        >Clase de Vehículo
+                        <span class="required">*</span></label
+                    >
+                    <div class="radio-group">
+                        <div class="radio-option">
+                            <input
+                                type="radio"
+                                id="clase_camioneta"
+                                name="clase_vehiculo"
+                                value="CAMIONETA"
+                                onclick="toggleOtroVehiculo()"
+                            />
+                            <label for="clase_camioneta">CAMIONETA</label>
+                        </div>
+                        <div class="radio-option">
+                            <input
+                                type="radio"
+                                id="clase_camion"
+                                name="clase_vehiculo"
+                                value="CAMION"
+                                checked
+                                onclick="toggleOtroVehiculo()"
+                            />
+                            <label for="clase_camion">CAMIÓN</label>
+                        </div>
+                        <div class="radio-option">
+                            <input
+                                type="radio"
+                                id="clase_moto"
+                                name="clase_vehiculo"
+                                value="MOTO"
+                                onclick="toggleOtroVehiculo()"
+                            />
+                            <label for="clase_moto">MOTO</label>
+                        </div>
+                        <div class="radio-option">
+                            <input
+                                type="radio"
+                                id="clase_otro"
+                                name="clase_vehiculo"
+                                value="OTRO"
+                                onclick="toggleOtroVehiculo()"
+                            />
+                            <label for="clase_otro">OTRO</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div
+                    class="form-group"
+                    id="otro_vehiculo_container"
+                    style="display: none"
+                >
+                    <label for="clase_otro_especifique"
+                        >Especifique tipo de vehículo
+                        <span class="required">*</span></label
+                    >
+                    <input
+                        type="text"
+                        id="clase_otro_especifique"
+                        name="clase_otro_especifique"
+                        placeholder="Ej: TRAILER, FURGONETA, etc."
+                    />
+                </div>
+
+                <script>
+                    function toggleOtroVehiculo() {
+                        const otroSelected =
+                            document.getElementById("clase_otro").checked;
+                        const container = document.getElementById(
+                            "otro_vehiculo_container",
+                        );
+                        const input = document.getElementById(
+                            "clase_otro_especifique",
+                        );
+
+                        if (otroSelected) {
+                            container.style.display = "block";
+                            input.required = true;
+                        } else {
+                            container.style.display = "none";
+                            input.required = false;
+                            input.value = "";
+                        }
+                    }
+
+                    // Llamar al cargar la página por si hay un valor guardado
+                    document.addEventListener(
+                        "DOMContentLoaded",
+                        toggleOtroVehiculo,
+                    );
+                </script>
+
+                <div class="info-box" style="margin-top: 20px">
+                    <p><strong>ℹ️ Campos fijos en Página 2:</strong></p>
+                    <p>• Entidad Territorial: ITAGUI</p>
+                    <p>• Horario: 6:00 AM - 6:00 PM LUNES A SÁBADO</p>
+                    <p>• Número de trabajadores: 2</p>
+                    <p>• Cumplimiento última inspección: 100%</p>
+                    <p>• Motivo de visita: Ya marcado en el PDF</p>
+                </div>
+
+                <!-- PÁGINA 3 -->
+                <div class="section-title">
+                    📄 PÁGINA 3 - Condiciones Sanitarias
+                </div>
+
+                <div class="info-box">
+                    <p><strong>✓ Página completamente estática</strong></p>
+                    <p>
+                        No requiere campos editables. Todos los valores son
+                        fijos en el PDF.
+                    </p>
+                </div>
+
+                <!-- PÁGINA 4 -->
+                <div class="section-title">
+                    📄 PÁGINA 4 - Firmas y Notificación
+                </div>
+
+                <div class="info-box">
+                    <p>
+                        <strong
+                            >✓ Fecha de firma generada automáticamente</strong
+                        >
+                    </p>
+                    <p>
+                        Se creará el formato: "hoy <strong>DIA</strong> mes
+                        <strong>MES</strong> del año <strong>AÑO</strong> en la
+                        Ciudad de <strong>ITAGUI</strong>"
+                    </p>
+                    <p>A partir de la fecha de inspección de la Página 1.</p>
+                    <p>
+                        <br /><strong>Funcionario fijo:</strong> NANCY JANETH
+                        MOSQUERA RENTERIA - CC: 42793918
+                    </p>
+                    <p><strong>Conductor:</strong> No se llena (campo vacío)</p>
+                </div>
+
+                <button type="submit">
+                    📄 Generar Certificado PDF Completo
+                </button>
+            </form>
+        </div>
+    </body>
+</html>

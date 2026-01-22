@@ -1,0 +1,9 @@
+Flask==3.0.0
+pypdf==3.17.4
+qrcode==7.4.2
+Pillow==10.1.0
+reportlab
+jinja2
+paramiko
+ftplib
+python-dotenv
