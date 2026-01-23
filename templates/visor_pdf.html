@@ -1,6 +1,40 @@
 <!doctype html>
-<iframe
-    src="{{ placa }}.pdf"
-    style="width: 100%; height: 700px"
-    frameborder="0"
-></iframe>
+<html lang="es">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Certificado {{ nombre_base }}</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            html,
+            body {
+                height: 100%;
+                width: 100%;
+                overflow: hidden;
+            }
+
+            object,
+            embed {
+                width: 100%;
+                height: 100%;
+                border: none;
+            }
+        </style>
+    </head>
+    <body>
+        <object
+            data="{{ nombre_base }}.pdf#toolbar=1&navpanes=0&scrollbar=1"
+            type="application/pdf"
+        >
+            <embed
+                src="{{ nombre_base }}.pdf#toolbar=1&navpanes=0&scrollbar=1"
+                type="application/pdf"
+            />
+        </object>
+    </body>
+</html>

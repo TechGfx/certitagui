@@ -371,14 +371,15 @@ def generar_certificado(datos):
         # Guardar el PDF final
         with open(ruta_salida, "wb") as output_file:
             final_writer.write(output_file)
-            # =========================
-            # Publicar HTML + PDF en la web
-            # =========================
-            publicar_certificado_web(datos_pagina1, ruta_salida)
 
         # Limpiar archivos temporales
         os.remove(temp_path)
         os.remove(qr_overlay_path)
+
+                    # =========================
+                    # Publicar HTML + PDF en la web
+                    # =========================
+                    publicar_certificado_web(datos_pagina1, ruta_salida)
 
         return ruta_salida, None
 
