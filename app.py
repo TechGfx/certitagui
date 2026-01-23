@@ -70,7 +70,7 @@ os.makedirs("generados", exist_ok=True)
 os.makedirs("instance", exist_ok=True)
 
 
-def dividir_tipo_transporte(texto, palabras_linea1=2):
+def dividir_tipo_transporte(texto, palabras_linea1=3):
     """Divide el tipo de transporte en dos líneas - Página 1"""
     if not texto:
         return {"tipodetransporte_1": "", "tipodetransporte_2": ""}
@@ -260,6 +260,7 @@ def generar_certificado(datos):
             "fecha_inspeccion": str(datos.get("fecha_inspeccion", "")),
             "fecha_inspeccion2": str(datos.get("fecha_inspeccion", "")),
             "fecha_vencimiento": str(datos.get("fecha_vencimiento", "")),
+            "tipo_transporte": str(datos.get("tipo_transporte", "")),
             "tipodetransporte_1": str(tipo_dividido["tipodetransporte_1"]),
             "tipodetransporte_2": str(tipo_dividido["tipodetransporte_2"]),
             "link_certificado": link_certificado,
@@ -376,10 +377,13 @@ def generar_certificado(datos):
         os.remove(temp_path)
         os.remove(qr_overlay_path)
 
-                    # =========================
-                    # Publicar HTML + PDF en la web
-                    # =========================
-                    publicar_certificado_web(datos_pagina1, ruta_salida)
+        # Publicar en web
+        try:
+            publicar_certificado_web(
+                datos, ruta_salida, tipo_certificado
+            )  # ← Esta línea
+        except Exception as e:
+            print(f"⚠️ Error al publicar en web: {e}")
 
         return ruta_salida, None
 
