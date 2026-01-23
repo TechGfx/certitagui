@@ -379,9 +379,7 @@ def generar_certificado(datos):
 
         # Publicar en web
         try:
-            publicar_certificado_web(
-                datos, ruta_salida, tipo_certificado
-            )  # ← Esta línea
+            publicar_certificado_web(datos, ruta_salida)
         except Exception as e:
             print(f"⚠️ Error al publicar en web: {e}")
 
@@ -391,45 +389,58 @@ def generar_certificado(datos):
         return None, str(e)
 
 
-def publicar_certificado_web(datos_pagina1, ruta_pdf):
-    placa = datos_pagina1["placa"]
+def publicar_certificado_web(datos, ruta_pdf):
+    placa = datos["placa"]
+    tipo_certificado = datos.get("tipo_certificado", "nuevo")
 
     # =========================
     # Render HTML
     # =========================
     tpl_index = env.get_template("index_certificado.html")
-    html_index = tpl_index.render(**datos_pagina1)
+    html_index = tpl_index.render(**datos)
 
-    index_path = f"build/index{placa}.html"
+    # indexPRY576.html / indexPRY576remo.html / indexPRY576remo2.html ...
+    sufijo = "" if tipo_certificado == "nuevo" else tipo_certificado
+    index_path = f"build/index{placa}{sufijo}.html"
+
     with open(index_path, "w", encoding="utf-8") as f:
         f.write(html_index)
 
     tpl_visor = env.get_template("visor_pdf.html")
-    html_visor = tpl_visor.render(**datos_pagina1)
+    html_visor = tpl_visor.render(**datos)
 
-    visor_path = f"build/{placa}.html"
+    visor_path = f"build/{placa}{sufijo}.html"
     with open(visor_path, "w", encoding="utf-8") as f:
         f.write(html_visor)
 
     # =========================
-    # FTP CLÁSICO (PUERTO 21)
+    # FTP
     # =========================
     from ftp_config import FTP_BASE, FTP_HOST, FTP_PASS, FTP_USER, FTP_VISOR
 
     ftp = FTP(FTP_HOST, timeout=30)
     ftp.login(user=FTP_USER, passwd=FTP_PASS)
 
-    # Subir index principal
+    # Subir index
     with open(index_path, "rb") as f:
-        ftp.storbinary(f"STOR {FTP_BASE}/index{placa}.html", f)
+        ftp.storbinary(
+            f"STOR {FTP_BASE}/index{placa}{sufijo}.html",
+            f,
+        )
 
     # Subir visor
     with open(visor_path, "rb") as f:
-        ftp.storbinary(f"STOR {FTP_VISOR}/{placa}.html", f)
+        ftp.storbinary(
+            f"STOR {FTP_VISOR}/{placa}{sufijo}.html",
+            f,
+        )
 
     # Subir PDF
     with open(ruta_pdf, "rb") as f:
-        ftp.storbinary(f"STOR {FTP_VISOR}/{placa}.pdf", f)
+        ftp.storbinary(
+            f"STOR {FTP_VISOR}/{placa}{sufijo}.pdf",
+            f,
+        )
 
     ftp.quit()
 
