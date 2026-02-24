@@ -14,7 +14,7 @@ def init_db():
         db.create_all()
         print("✓ Tablas creadas")
 
-        # Verificar si ya existe algún usuario
+        # Verificar si ya existe algún usuarioo
         if User.query.first() is None:
             # Crear usuario admin por defecto
             admin_username = os.environ.get("ADMIN_USER", "lauvasco518")
