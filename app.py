@@ -29,21 +29,16 @@ app = Flask(__name__)
 # === CONFIGURACIÓN DE LA BASE DE DATOS Y SEGURIDAD ===
 # === CONFIGURACIÓN DE LA BASE DE DATOS Y SEGURIDAD ===
 
-# SECRET_KEY: obtener de variable de entorno o usar una por defecto en desarrollo
+# SECRET_KEY
 app.secret_key = os.environ.get("SECRET_KEY", "dev-key-cambiar-en-produccion")
 
-# DATABASE_URL: configuración automática para PostgreSQL o SQLite
+# DATABASE_URL (ahora para MySQL)
 database_url = os.environ.get("DATABASE_URL")
 
-if database_url:
-    # Render usa postgres:// pero SQLAlchemy necesita postgresql://
-    if database_url.startswith("postgres://"):
-        database_url = database_url.replace("postgres://", "postgresql://", 1)
-    app.config["SQLALCHEMY_DATABASE_URI"] = database_url
-else:
-    # Desarrollo local con SQLite
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///app.db"
+if not database_url:
+    raise RuntimeError("DATABASE_URL no está configurada")
 
+app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db.init_app(app)
@@ -209,6 +204,10 @@ def generar_certificado(datos):
         # Agregar todas las páginas
         writer.append(reader)
 
+        # Usar placa_archivos para nombres de archivos
+        placa_display = datos.get("placa", "")  # Placa completa para mostrar
+        placa_archivos = datos.get("placa_archivos", placa_display)  # Para archivos
+
         # Dividir tipo de transporte (Página 1: 2 palabras)
         tipo_dividido = dividir_tipo_transporte(
             datos.get("tipo_transporte", ""), palabras_linea1=3
@@ -304,6 +303,14 @@ def generar_certificado(datos):
             "fecha_firma_mes": fecha_firma["mes"],
             "fecha_firma_anio": fecha_firma["anio"],
         }
+
+        # === GENERAR NOMBRE DE ARCHIVO CON PLACA DEL TRAILER ===
+        placa_limpia = placa_archivos.replace(" ", "_")
+
+        if tipo_certificado != "nuevo":
+            nombre_archivo = f"{placa_limpia}{tipo_certificado}.pdf"
+        else:
+            nombre_archivo = f"{placa_limpia}.pdf"
 
         # Actualizar cada página por separado
         if len(writer.pages) >= 1:
@@ -471,9 +478,27 @@ def login():
 @login_required
 def generar():
     """Procesa el formulario y genera el PDF"""
+
+    # Capturar datos del trailer
+    es_trailer = request.form.get("es_trailer") == "true"
+    placa_vehiculo = request.form.get("placa", "")
+    placa_trailer = request.form.get("placa_trailer", "")
+
+    # Si es trailer, combinar placas
+    if es_trailer and placa_trailer:
+        placa_completa = f"{placa_vehiculo} TRAILER: {placa_trailer}"
+        placa_archivos = placa_trailer  # Usar placa del trailer para archivos
+    else:
+        placa_completa = placa_vehiculo
+        placa_archivos = placa_vehiculo
+
     datos = {
         # Tipo de certificado
         "tipo_certificado": request.form.get("tipo_certificado", "nuevo"),  # ← NUEVO
+        # Placas
+        "placa": placa_completa,  # Para mostrar en el PDF
+        "placa_archivos": placa_archivos,  # Para nombres de archivos
+        "es_trailer": es_trailer,
         # Página 1
         "placa": request.form.get("placa", ""),
         "marca": request.form.get("marca", ""),

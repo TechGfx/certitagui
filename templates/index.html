@@ -351,17 +351,39 @@
 
                 <div class="row">
                     <div class="form-group">
-                        <label for="placa"
-                            >Placa <span class="required">*</span></label
-                        >
-                        <input
-                            type="text"
-                            id="placa"
-                            name="placa"
-                            required
-                            placeholder="Ej: PRY576"
-                        />
+                        <label for="placa">Placa del Vehículo <span class="required">*</span></label>
+                        <input type="text" id="placa" name="placa" required placeholder="Ej: TRF957">
                     </div>
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="es_trailer" name="es_trailer" value="true" onclick="toggleTrailer()">
+                            ¿Tiene trailer?
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group" id="placa_trailer_container" style="display: none;">
+                    <label for="placa_trailer">Placa del Trailer <span class="required">*</span></label>
+                    <input type="text" id="placa_trailer" name="placa_trailer" placeholder="Ej: R40675">
+                </div>
+
+                <script>
+                function toggleTrailer() {
+                    const esTrailer = document.getElementById('es_trailer').checked;
+                    const container = document.getElementById('placa_trailer_container');
+                    const input = document.getElementById('placa_trailer');
+
+                    if (esTrailer) {
+                        container.style.display = 'block';
+                        input.required = true;
+                    } else {
+                        container.style.display = 'none';
+                        input.required = false;
+                        input.value = '';
+                    }
+                }
+                </script>
 
                     <div class="form-group">
                         <label for="marca"

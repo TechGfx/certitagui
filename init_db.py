@@ -17,8 +17,8 @@ def init_db():
         # Verificar si ya existe algún usuario
         if User.query.first() is None:
             # Crear usuario admin por defecto
-            admin_username = os.environ.get("ADMIN_USER", "admin")
-            admin_password = os.environ.get("ADMIN_PASSWORD", "cambiar123")
+            admin_username = os.environ.get("ADMIN_USER", "lauvasco518")
+            admin_password = os.environ.get("ADMIN_PASSWORD", "0518lau")
 
             admin = User(username=admin_username, role="admin")
             admin.set_password(admin_password)
