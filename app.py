@@ -14,6 +14,7 @@ from flask_login import (
     login_user,
     logout_user,
 )
+from dotenv import load_dotenv
 from jinja2 import Environment, FileSystemLoader
 from PIL import Image
 from pypdf import PdfReader, PdfWriter
@@ -24,6 +25,8 @@ from reportlab.pdfgen import canvas
 from auth import auth
 from models import User, db
 
+load_dotenv()
+print("DATABASE_URL =", os.getenv("DATABASE_URL"))
 app = Flask(__name__)
 
 # === CONFIGURACIÓN DE LA BASE DE DATOS Y SEGURIDAD ===
@@ -218,11 +221,31 @@ def generar_certificado(datos):
         fecha_inspeccion = datos.get("fecha_inspeccion", "")
         tipo_certificado = datos.get("tipo_certificado", "nuevo")
 
+        #################################
+        #################################
+
+        print("\n===== DEBUG CERTIFICADO =====")
+        print("TIPO:", tipo_certificado)
+        print("PLACA:", placa)
+        print("PLACA_ARCHIVOS:", placa_archivos)
+
+        #################################
+        #################################
+
         numero_acta = generar_numero_acta(fecha_inspeccion, placa)
         numero_inspeccion = generar_numero_inspeccion(placa)
         fecha_acta = convertir_fecha_formato_acta(fecha_inspeccion)
         fecha_firma = convertir_fecha_formato_firma(fecha_inspeccion)
         link_certificado = generar_link_certificado(placa, tipo_certificado)
+
+        #################################
+        #################################
+
+        print("LINK:", link_certificado)
+        print("=============================\n")
+
+        #################################
+        #################################
 
         # Generar código QR
         qr_image = generar_qr_code(link_certificado)
@@ -371,9 +394,6 @@ def generar_certificado(datos):
             for i in range(1, len(temp_reader.pages)):
                 final_writer.add_page(temp_reader.pages[i])
 
-        # Generar nombre de archivo único
-        placa_limpia = placa.replace(" ", "_")
-        nombre_archivo = f"{placa_limpia}.pdf"
         ruta_salida = os.path.join("generados", nombre_archivo)
 
         # Guardar el PDF final
@@ -385,10 +405,10 @@ def generar_certificado(datos):
         os.remove(qr_overlay_path)
 
         # Publicar en web
-        try:
-            publicar_certificado_web(datos, ruta_salida)
-        except Exception as e:
-            print(f"⚠️ Error al publicar en web: {e}")
+        ok, mensaje = publicar_certificado_web(datos, ruta_salida)
+
+        if not ok:
+            return None, f"Error FTP: {mensaje}"
 
         return ruta_salida, None
 
@@ -397,59 +417,94 @@ def generar_certificado(datos):
 
 
 def publicar_certificado_web(datos, ruta_pdf):
-    placa = datos["placa"]
-    tipo_certificado = datos.get("tipo_certificado", "nuevo")
+    try:
+        placa = datos["placa"]
+        tipo_certificado = datos.get("tipo_certificado", "nuevo")
 
-    # =========================
-    # Render HTML
-    # =========================
-    tpl_index = env.get_template("index_certificado.html")
-    html_index = tpl_index.render(**datos)
+        # =========================
+        # Render HTML
+        # =========================
+        tpl_index = env.get_template("index_certificado.html")
+        html_index = tpl_index.render(**datos)
 
-    # indexPRY576.html / indexPRY576remo.html / indexPRY576remo2.html ...
-    sufijo = "" if tipo_certificado == "nuevo" else tipo_certificado
-    index_path = f"build/index{placa}{sufijo}.html"
+        # indexPRY576.html / indexPRY576remo.html / indexPRY576remo2.html ...
+        print("\n========== FTP ==========")
+        print("Placa:", placa)
+        print("Tipo:", tipo_certificado)
 
-    with open(index_path, "w", encoding="utf-8") as f:
-        f.write(html_index)
+        sufijo = "" if tipo_certificado == "nuevo" else tipo_certificado
 
-    tpl_visor = env.get_template("visor_pdf.html")
-    html_visor = tpl_visor.render(**datos)
+        print("Sufijo:", repr(sufijo))
+        print("PDF remoto:", f"{placa}{sufijo}.pdf")
+        print("HTML remoto:", f"{placa}{sufijo}.html")
+        print("INDEX remoto:", f"index{placa}{sufijo}.html")
+        print("=========================\n")
+        index_path = f"build/index{placa}{sufijo}.html"
 
-    visor_path = f"build/{placa}{sufijo}.html"
-    with open(visor_path, "w", encoding="utf-8") as f:
-        f.write(html_visor)
+        with open(index_path, "w", encoding="utf-8") as f:
+            f.write(html_index)
 
-    # =========================
-    # FTP
-    # =========================
-    from ftp_config import FTP_BASE, FTP_HOST, FTP_PASS, FTP_USER, FTP_VISOR
+        tpl_visor = env.get_template("visor_pdf.html")
+        html_visor = tpl_visor.render(**datos)
 
-    ftp = FTP(FTP_HOST, timeout=30)
-    ftp.login(user=FTP_USER, passwd=FTP_PASS)
+        visor_path = f"build/{placa}{sufijo}.html"
+        with open(visor_path, "w", encoding="utf-8") as f:
+            f.write(html_visor)
 
-    # Subir index
-    with open(index_path, "rb") as f:
-        ftp.storbinary(
-            f"STOR {FTP_BASE}/index{placa}{sufijo}.html",
-            f,
-        )
+        # =========================
+        # FTP
+        # =========================
+        from ftp_config import FTP_BASE, FTP_HOST, FTP_PASS, FTP_USER, FTP_VISOR
 
-    # Subir visor
-    with open(visor_path, "rb") as f:
-        ftp.storbinary(
-            f"STOR {FTP_VISOR}/{placa}{sufijo}.html",
-            f,
-        )
+        ftp = FTP(FTP_HOST, timeout=30)
+        ftp.login(user=FTP_USER, passwd=FTP_PASS)
 
-    # Subir PDF
-    with open(ruta_pdf, "rb") as f:
-        ftp.storbinary(
-            f"STOR {FTP_VISOR}/{placa}{sufijo}.pdf",
-            f,
-        )
+        # Subir index
+        with open(index_path, "rb") as f:
+            ftp.storbinary(
+                f"STOR {FTP_BASE}/index{placa}{sufijo}.html",
+                f,
+            )
 
-    ftp.quit()
+        # Subir visor
+        with open(visor_path, "rb") as f:
+            ftp.storbinary(
+                f"STOR {FTP_VISOR}/{placa}{sufijo}.html",
+                f,
+            )
+
+        # Subir PDF
+        with open(ruta_pdf, "rb") as f:
+            ftp.storbinary(
+                f"STOR {FTP_VISOR}/{placa}{sufijo}.pdf",
+                f,
+            )
+
+        # Entrar al directorio donde quedó el PDF
+        ftp.cwd(FTP_VISOR)
+
+        archivos = ftp.nlst()
+
+        print("\nARCHIVOS EN FTP:")
+        for archivo in archivos:
+            print(" -", archivo)
+
+        if f"{placa}{sufijo}.pdf" in archivos:
+            print("✅ El PDF existe en el FTP")
+        else:
+            print("❌ El PDF NO existe en el FTP")
+
+        ftp.quit()
+
+        return True, f"""✅ Certificado publicado correctamente.
+
+PDF: {placa}{sufijo}.pdf
+HTML: {placa}{sufijo}.html
+INDEX: index{placa}{sufijo}.html
+"""
+
+    except Exception as e:
+        return False, str(e)
 
 
 @app.route("/")
@@ -492,9 +547,24 @@ def generar():
         placa_completa = placa_vehiculo
         placa_archivos = placa_vehiculo
 
+    print("====== FORM ======")
+    print(request.form)
+    print("tipo_certificado =", request.form.get("tipo_certificado"))
+    print(
+        "tipo_certificado_hidden =",
+        request.form.get("tipo_certificado_hidden"),
+    )
+    print("==================")
+
+    tipo_certificado = (
+        request.form.get("tipo_certificado")
+        or request.form.get("tipo_certificado_hidden")
+        or "nuevo"
+    )
+
     datos = {
         # Tipo de certificado
-        "tipo_certificado": request.form.get("tipo_certificado", "nuevo"),  # ← NUEVO
+        "tipo_certificado": tipo_certificado,
         # Placas
         "placa": placa_completa,  # Para mostrar en el PDF
         "placa_archivos": placa_archivos,  # Para nombres de archivos
@@ -528,9 +598,13 @@ def generar():
     if error:
         return f"Error al generar el certificado: {error}", 500
 
-    return send_file(
-        ruta_pdf, as_attachment=True, download_name=os.path.basename(ruta_pdf)
-    )
+    return f"""
+<h2>✅ Certificado generado correctamente</h2>
+
+<p><b>Archivo:</b> {os.path.basename(ruta_pdf)}</p>
+
+<p>El PDF se generó y el FTP respondió correctamente.</p>
+"""
 
 
 ## **3. Agrega el campo en LibreOffice Draw:**
