@@ -197,6 +197,43 @@ def _extract_form_fields(reader):
     return fields
 
 
+def _form_field_value(form_fields, candidate_names):
+    normalized_map = {_normalize_key(k): v for k, v in form_fields.items() if v}
+    for name in candidate_names:
+        wanted = _normalize_key(name)
+        for key_norm, value in normalized_map.items():
+            if key_norm == wanted:
+                return _normalize_text(value)
+    return ""
+
+
+def _first_regex_group(text, patterns):
+    if not text:
+        return ""
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.I | re.S)
+        if match:
+            return _normalize_text(match.group(1))
+    return ""
+
+
+def _extract_date_iso(text):
+    # 2026-07-21
+    direct = _first_regex_group(text, [r"\b(\d{4}-\d{2}-\d{2})\b"])
+    if direct:
+        return direct
+
+    # 21/07/2026 -> 2026-07-21
+    dmy = _first_regex_group(text, [r"\b(\d{1,2}/\d{1,2}/\d{4})\b"])
+    if dmy:
+        try:
+            dt = datetime.strptime(dmy, "%d/%m/%Y")
+            return dt.strftime("%Y-%m-%d")
+        except Exception:
+            return dmy
+    return ""
+
+
 def _extract_value_from_lines(page_text, aliases):
     lines = [_normalize_text(line) for line in page_text.splitlines() if _normalize_text(line)]
     regexes = [_alias_pattern(alias) for alias in aliases]
@@ -294,56 +331,134 @@ def _parse_autocomplete_pdf(pdf_path):
     reader = PdfReader(pdf_path)
     form_fields = _extract_form_fields(reader)
     page_texts = [(page.extract_text() or "") for page in reader.pages]
+    page1 = page_texts[0] if len(page_texts) >= 1 else ""
+    page2 = page_texts[1] if len(page_texts) >= 2 else page1
+    all_text = "\n".join(page_texts)
 
     data = {
-        "placa": _extract_semantic_value(form_fields, page_texts, ["Placa", "Placa del Vehículo"]),
-        "marca": _extract_semantic_value(form_fields, page_texts, ["Marca"]),
-        "modelo": _extract_semantic_value(form_fields, page_texts, ["Modelo"]),
-        "color": _extract_semantic_value(form_fields, page_texts, ["Color"]),
-        "capacidad": _extract_semantic_value(form_fields, page_texts, ["Capacidad"]),
-        "persona": _extract_semantic_value(
-            form_fields,
-            page_texts,
-            ["Persona", "Nombre del propietario", "Nombre del Propietario"],
-        ),
-        "nit": _extract_semantic_value(form_fields, page_texts, ["Nit", "NIT", "Número de documento"]),
-        "codigo_verificacion": _extract_semantic_value(
-            form_fields,
-            page_texts,
-            ["Código de verificación", "Código de Verificación"],
-        ),
-        "tipo_transporte": _extract_semantic_value(
-            form_fields,
-            page_texts,
-            ["Tipo de transporte", "Tipo de alimento transportado", "Tipo de Alimento Transportado"],
-        ),
-        "ciudad": _extract_semantic_value(form_fields, page_texts, ["Ciudad", "Ciudad (Municipio)", "Municipio"]),
-        "departamento": _extract_semantic_value(form_fields, page_texts, ["Departamento"]),
-        "direccion_notificacion": _extract_semantic_value(
-            form_fields,
-            page_texts,
-            ["Dirección de notificación", "Dirección de Notificación"],
-        ),
-        "telefono": _extract_semantic_value(form_fields, page_texts, ["Teléfonos", "Telefono", "Teléfono"]),
-        "correo_electronico": _extract_semantic_value(
-            form_fields,
-            page_texts,
-            ["Correo electrónico del propietario", "Correo Electrónico del Propietario", "Correo Electrónico"],
-        ),
-        "sistema_refrigeracion": _extract_semantic_value(
-            form_fields,
-            page_texts,
-            ["Sistema de refrigeración", "Sistema de Refrigeración"],
-        ),
-        "clase_vehiculo": _extract_semantic_value(
-            form_fields,
-            page_texts,
-            ["Clase del vehículo", "Clase del Vehículo"],
-        ),
+        # Campos base del formulario (exactos)
+        "placa": _form_field_value(form_fields, ["placa", "placa_2"]),
+        "marca": _form_field_value(form_fields, ["marca", "marca_2"]),
+        "modelo": _form_field_value(form_fields, ["modelo", "modelo_2"]),
+        "color": _form_field_value(form_fields, ["color", "color_2"]),
+        "capacidad": _form_field_value(form_fields, ["capacidad"]),
+        "persona": _form_field_value(form_fields, ["persona", "persona_2", "nombre_del_propietario"]),
+        "nit": _form_field_value(form_fields, ["nit", "nit_2", "numero_de_documento"]),
+        "codigo_verificacion": _form_field_value(form_fields, ["codigo_verificacion"]),
+        "tipo_transporte": _form_field_value(form_fields, ["tipo_transporte", "tipodealimento"]),
+        "ciudad": _form_field_value(form_fields, ["ciudad", "municipio"]),
+        "departamento": _form_field_value(form_fields, ["departamento"]),
+        "direccion_notificacion": _form_field_value(form_fields, ["direccion_notificacion"]),
+        "telefono": _form_field_value(form_fields, ["telefono", "telefonos"]),
+        "correo_electronico": _form_field_value(form_fields, ["correo_electronico"]),
+        "sistema_refrigeracion": "",
+        "clase_vehiculo": "",
+        "fecha_inspeccion": _form_field_value(form_fields, ["fecha_inspeccion", "fecha_inspeccion2"]),
+        "fecha_vencimiento": _form_field_value(form_fields, ["fecha_vencimiento"]),
     }
 
+    # Fallback regex estricto: prioriza la página 2 para evitar texto legal de la página 1.
+    if not data["persona"]:
+        data["persona"] = _first_regex_group(
+            page2,
+            [r"NOMBRE\s+DEL\s+PROPIETARIO\s+([A-Z0-9\s\.\-]+?)\s+(?:DOCUMENTO|CC|CE|NIT)"]
+        )
+
+    if not data["nit"]:
+        data["nit"] = _first_regex_group(
+            page2,
+            [r"NUMERO\s+DE\s+DOCUMENTO\s+([0-9]{5,20})", r"N[ÚU]MERO\s+DE\s+DOCUMENTO\s+([0-9]{5,20})"],
+        )
+
+    if not data["placa"]:
+        data["placa"] = _first_regex_group(
+            page2,
+            [r"PLACA\s+DEL\s+VEH[ÍI]CULO\s+([A-Z0-9\-]{4,12})"],
+        )
+
+    if not data["telefono"]:
+        data["telefono"] = _first_regex_group(
+            page2,
+            [r"TELEFONOS\s+([0-9\s\-]{7,25})", r"TEL[ÉE]FONOS\s+([0-9\s\-]{7,25})"],
+        )
+
+    if not data["correo_electronico"]:
+        data["correo_electronico"] = _first_regex_group(
+            page2,
+            [r"CORREO\s+ELECTR[ÓO]NICO\s+DEL\s+PROPIETARIO\s+([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})"],
+        )
+
+    if not data["direccion_notificacion"]:
+        data["direccion_notificacion"] = _first_regex_group(
+            page2,
+            [r"DIRECCI[ÓO]N\s+DE\s+NOTIFICACI[ÓO]N\s+(.+?)\s+(?:DEPARTAMENTO|MUNICIPIO|CLASE)"],
+        )
+
+    if not data["departamento"]:
+        data["departamento"] = _first_regex_group(
+            page2,
+            [r"DEPARTAMENTO\s+([A-Z\s]+?)\s+MUNICIPIO"],
+        )
+
+    if not data["ciudad"]:
+        data["ciudad"] = _first_regex_group(
+            page2,
+            [r"MUNICIPIO\s+([A-Z\s]+?)\s+CLASE", r"CIUDAD\s+([A-Z\s]+?)\s+FECHA"],
+        )
+
+    if not data["marca"] or not data["modelo"] or not data["color"]:
+        trio = re.search(
+            r"MARCA\s+(.+?)\s+MODELO\s+(.+?)\s+COLOR\s+(.+?)\s+(?:TIPO\s+DE\s+ALIMENTO|SISTEMA|$)",
+            page2,
+            flags=re.I | re.S,
+        )
+        if trio:
+            if not data["marca"]:
+                data["marca"] = _normalize_text(trio.group(1))
+            if not data["modelo"]:
+                data["modelo"] = _normalize_text(trio.group(2))
+            if not data["color"]:
+                data["color"] = _normalize_text(trio.group(3))
+
+    if not data["tipo_transporte"]:
+        data["tipo_transporte"] = _first_regex_group(
+            page2,
+            [r"TIPO\s+DE\s+ALIMENTO\s+TRANSPORTADO\s+(.+?)\s+SISTEMA\s+DE\s+REFRIGERACI[ÓO]N"],
+        )
+
+    if not data["capacidad"]:
+        data["capacidad"] = _first_regex_group(
+            page1,
+            [r"Capacidad\s*:?\s*([A-Z0-9\s\.,\-]+?)\s+Persona", r"CAPACIDAD\s*:?\s*([A-Z0-9\s\.,\-]+)"],
+        )
+
+    if not data["codigo_verificacion"]:
+        data["codigo_verificacion"] = _first_regex_group(
+            page1,
+            [r"C[ÓO]DIGO\s+DE\s+VERIFICACI[ÓO]N\s*:?\s*([A-Z0-9\-]+)"],
+        )
+
+    if not data["fecha_inspeccion"]:
+        data["fecha_inspeccion"] = _extract_date_iso(page1) or _extract_date_iso(page2)
+
+    # Limpieza final y guardrails: no aceptar valores contaminados por etiquetas.
     for key in list(data.keys()):
-        data[key] = _clean_extracted_value(key, data.get(key, ""))
+        cleaned = _clean_extracted_value(key, data.get(key, ""))
+
+        # Si el valor contiene muchas etiquetas, se descarta para no llenar basura.
+        upper = cleaned.upper()
+        contamination_tokens = [
+            "SISTEMA DE REFRIGERACION",
+            "CORREO ELECTRONICO",
+            "NUMERO DE INSPECCION",
+            "LEY 715",
+            "MUNICIPIO DE ITAGUI",
+        ]
+        hits = sum(1 for token in contamination_tokens if token in upper)
+        if hits >= 2:
+            cleaned = ""
+
+        data[key] = cleaned
 
     return data
 
