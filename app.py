@@ -24,7 +24,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
 from auth import auth
-from models import GenerationAudit, User, db
+from models import GenerationAudit, Party, User, VehicleProfile, db
 
 load_dotenv()
 print("DATABASE_URL =", os.getenv("DATABASE_URL"))
@@ -73,6 +73,98 @@ Path("build").mkdir(exist_ok=True)
 
 os.makedirs("generados", exist_ok=True)
 os.makedirs("instance", exist_ok=True)
+
+
+def normalizar_placa(placa):
+    return (placa or "").strip().upper().replace(" ", "")
+
+
+def guardar_perfil_autocompletado(datos):
+    placa = normalizar_placa(datos.get("placa", ""))
+    if not placa:
+        return
+
+    nit = (datos.get("nit", "") or "").strip()
+    persona = (datos.get("persona", "") or "").strip()
+
+    owner = None
+    if nit:
+        owner = Party.query.filter_by(document_number=nit).first()
+        if owner is None:
+            owner = Party(document_number=nit, name=persona or nit, kind="company")
+            db.session.add(owner)
+        else:
+            if persona:
+                owner.name = persona
+    elif persona:
+        owner = Party.query.filter_by(name=persona).first()
+        if owner is None:
+            owner = Party(name=persona, kind="person")
+            db.session.add(owner)
+
+    if owner is not None:
+        owner.phone = (datos.get("telefono", "") or "").strip() or owner.phone
+        owner.email = (datos.get("correo_electronico", "") or "").strip() or owner.email
+        owner.address = (
+            (datos.get("direccion_notificacion", "") or "").strip() or owner.address
+        )
+        owner.city = (datos.get("ciudad", "") or "").strip() or owner.city
+        owner.department = (
+            (datos.get("departamento", "") or "").strip() or owner.department
+        )
+
+    vehicle = VehicleProfile.query.filter_by(plate=placa).first()
+    if vehicle is None:
+        vehicle = VehicleProfile(plate=placa)
+        db.session.add(vehicle)
+
+    if owner is not None:
+        vehicle.owner = owner
+
+    vehicle.marca = (datos.get("marca", "") or "").strip() or vehicle.marca
+    vehicle.modelo = (datos.get("modelo", "") or "").strip() or vehicle.modelo
+    vehicle.color = (datos.get("color", "") or "").strip() or vehicle.color
+    vehicle.capacidad = (datos.get("capacidad", "") or "").strip() or vehicle.capacidad
+    vehicle.tipo_transporte = (
+        (datos.get("tipo_transporte", "") or "").strip() or vehicle.tipo_transporte
+    )
+    vehicle.clase_vehiculo = (
+        (datos.get("clase_vehiculo", "") or "").strip() or vehicle.clase_vehiculo
+    )
+    vehicle.sistema_refrigeracion = (
+        (datos.get("sistema_refrigeracion", "") or "").strip()
+        or vehicle.sistema_refrigeracion
+    )
+    vehicle.codigo_verificacion = (
+        (datos.get("codigo_verificacion", "") or "").strip()
+        or vehicle.codigo_verificacion
+    )
+    vehicle.last_certificate_type = (
+        (datos.get("tipo_certificado", "") or "").strip() or vehicle.last_certificate_type
+    )
+
+
+def serializar_autocompletado(vehicle):
+    owner = vehicle.owner
+    return {
+        "placa": vehicle.plate,
+        "marca": vehicle.marca or "",
+        "modelo": vehicle.modelo or "",
+        "color": vehicle.color or "",
+        "capacidad": vehicle.capacidad or "",
+        "tipo_transporte": vehicle.tipo_transporte or "",
+        "codigo_verificacion": vehicle.codigo_verificacion or "",
+        "clase_vehiculo": vehicle.clase_vehiculo or "",
+        "sistema_refrigeracion": vehicle.sistema_refrigeracion or "",
+        "tipo_certificado": vehicle.last_certificate_type or "nuevo",
+        "persona": owner.name if owner else "",
+        "nit": owner.document_number if owner else "",
+        "telefono": owner.phone if owner else "",
+        "correo_electronico": owner.email if owner else "",
+        "direccion_notificacion": owner.address if owner else "",
+        "ciudad": owner.city if owner else "",
+        "departamento": owner.department if owner else "",
+    }
 
 
 def dividir_tipo_transporte(texto, palabras_linea1=3):
@@ -542,6 +634,34 @@ def descargar_generado(filename):
     return send_from_directory("generados", filename, as_attachment=True)
 
 
+@app.route("/api/autocompletar/placa/<placa>", methods=["GET"])
+@login_required
+def autocompletar_por_placa(placa):
+    placa_norm = normalizar_placa(placa)
+    if not placa_norm:
+        return jsonify({"ok": False, "message": "Placa inválida"}), 400
+
+    vehicle = VehicleProfile.query.filter_by(plate=placa_norm).first()
+    if vehicle is None:
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "message": f"No hay datos guardados para la placa {placa_norm}.",
+                }
+            ),
+            404,
+        )
+
+    return jsonify(
+        {
+            "ok": True,
+            "message": f"Datos encontrados para la placa {placa_norm}.",
+            "data": serializar_autocompletado(vehicle),
+        }
+    )
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -651,6 +771,12 @@ def generar():
         remote_pdf_url=publicacion.get("remote_pdf_url") if publicacion else None,
     )
     db.session.add(audit_ok)
+
+    try:
+        guardar_perfil_autocompletado(datos)
+    except Exception as profile_exc:
+        print("WARN: no se pudo guardar perfil para autocompletado:", profile_exc)
+
     db.session.commit()
 
     return jsonify(

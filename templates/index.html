@@ -251,6 +251,14 @@
                 font-weight: 600;
             }
 
+            .inline-btn {
+                margin-top: 8px;
+                width: auto;
+                padding: 8px 12px;
+                font-size: 13px;
+                font-weight: 600;
+            }
+
             @keyframes fadeIn {
                 from {
                     opacity: 0;
@@ -468,6 +476,7 @@
                     <div class="form-group">
                         <label for="placa">Placa del Vehículo <span class="required">*</span></label>
                         <input type="text" id="placa" name="placa" required placeholder="Ej: TRF957">
+                        <button type="button" class="inline-btn" id="buscar_placa_btn">🔎 Buscar datos guardados por placa</button>
                     </div>
 
                     <div class="form-group">
@@ -967,6 +976,61 @@
                     resultBox.style.display = "block";
                 }
 
+                function applyAutocompleteData(data) {
+                    const fields = [
+                        "marca",
+                        "modelo",
+                        "color",
+                        "capacidad",
+                        "persona",
+                        "nit",
+                        "codigo_verificacion",
+                        "tipo_transporte",
+                        "ciudad",
+                        "departamento",
+                        "direccion_notificacion",
+                        "telefono",
+                        "correo_electronico",
+                    ];
+
+                    fields.forEach((field) => {
+                        const input = document.getElementById(field);
+                        if (input && data[field]) {
+                            input.value = data[field];
+                        }
+                    });
+
+                    if (data.sistema_refrigeracion) {
+                        const radio = document.querySelector(
+                            `input[name="sistema_refrigeracion"][value="${data.sistema_refrigeracion}"]`,
+                        );
+                        if (radio) {
+                            radio.checked = true;
+                        }
+                    }
+
+                    if (data.clase_vehiculo) {
+                        const radio = document.querySelector(
+                            `input[name="clase_vehiculo"][value="${data.clase_vehiculo}"]`,
+                        );
+                        if (radio) {
+                            radio.checked = true;
+                            toggleOtroVehiculo();
+                        }
+                    }
+
+                    if (data.tipo_certificado) {
+                        const radio = document.querySelector(
+                            `input[name="tipo_certificado"][value="${data.tipo_certificado}"]`,
+                        );
+                        if (radio) {
+                            radio.checked = true;
+                        }
+                    }
+
+                    updateLinkPreview();
+                }
+
                 function addRecentItem(item) {
                     const tbody = document.getElementById("recent_list");
                     const emptyRow = document.getElementById("no_recent_row");
@@ -1010,6 +1074,58 @@
                     }
                 }
 
+                async function buscarAutocompletadoPorPlaca() {
+                    const placaInput = document.getElementById("placa");
+                    const buscarPlacaBtn = document.getElementById("buscar_placa_btn");
+                    const placa = placaInput.value.trim().toUpperCase();
+
+                    if (!placa) {
+                        showToast("Escribe una placa para buscar autocompletado.", "error");
+                        placaInput.focus();
+                        return;
+                    }
+
+                    const originalLabel = buscarPlacaBtn
+                        ? buscarPlacaBtn.textContent
+                        : "";
+
+                    if (buscarPlacaBtn) {
+                        buscarPlacaBtn.disabled = true;
+                        buscarPlacaBtn.textContent = "⏳ Buscando...";
+                    }
+
+                    try {
+                        const response = await fetch(
+                            `/api/autocompletar/placa/${encodeURIComponent(placa)}`,
+                            {
+                                method: "GET",
+                                headers: {
+                                    "X-Requested-With": "XMLHttpRequest",
+                                },
+                            },
+                        );
+
+                        const payload = await response.json();
+
+                        if (!response.ok || !payload.ok) {
+                            throw new Error(
+                                payload.message ||
+                                    "No se encontraron datos para esa placa.",
+                            );
+                        }
+
+                        applyAutocompleteData(payload.data || {});
+                        showToast(payload.message, "success");
+                    } catch (error) {
+                        showToast(error.message, "error");
+                    } finally {
+                        if (buscarPlacaBtn) {
+                            buscarPlacaBtn.disabled = false;
+                            buscarPlacaBtn.textContent = originalLabel;
+                        }
+                    }
+                }
+
                 document.addEventListener("DOMContentLoaded", function () {
                     document
                         .getElementById("placa")
@@ -1023,6 +1139,24 @@
 
                     const form = document.getElementById("certificado_form");
                     const submitButton = document.getElementById("submit_button");
+                    const buscarPlacaBtn = document.getElementById("buscar_placa_btn");
+
+                    if (buscarPlacaBtn) {
+                        buscarPlacaBtn.addEventListener("click", buscarAutocompletadoPorPlaca);
+                    }
+
+                    const placaInput = document.getElementById("placa");
+                    placaInput.addEventListener("blur", function () {
+                        if (placaInput.value.trim()) {
+                            buscarAutocompletadoPorPlaca();
+                        }
+                    });
+                    placaInput.addEventListener("keydown", function (event) {
+                        if (event.key === "Enter") {
+                            event.preventDefault();
+                            buscarAutocompletadoPorPlaca();
+                        }
+                    });
 
                     form.addEventListener("submit", async function (event) {
                         event.preventDefault();
