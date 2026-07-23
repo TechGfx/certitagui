@@ -176,6 +176,92 @@
                 margin-top: 5px;
             }
 
+            .toast-container {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 9999;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .toast {
+                min-width: 280px;
+                max-width: 420px;
+                padding: 12px 16px;
+                border-radius: 8px;
+                color: #fff;
+                font-size: 14px;
+                box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+                animation: fadeIn 0.25s ease-out;
+            }
+
+            .toast.success {
+                background: #1f9d55;
+            }
+
+            .toast.error {
+                background: #d64545;
+            }
+
+            .result-box {
+                display: none;
+                margin-top: 20px;
+                background: #ecfff4;
+                border-left: 4px solid #1f9d55;
+                padding: 15px;
+                border-radius: 5px;
+            }
+
+            .result-box p {
+                margin-bottom: 8px;
+                color: #214d37;
+                word-break: break-all;
+            }
+
+            .result-box a {
+                color: #0b6c3f;
+                text-decoration: none;
+                font-weight: 600;
+            }
+
+            .recent-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 10px;
+                font-size: 13px;
+            }
+
+            .recent-table th,
+            .recent-table td {
+                border-bottom: 1px solid #e9e9e9;
+                padding: 8px;
+                text-align: left;
+                vertical-align: top;
+            }
+
+            .status-ok {
+                color: #1f9d55;
+                font-weight: 600;
+            }
+
+            .status-err {
+                color: #d64545;
+                font-weight: 600;
+            }
+
+            @keyframes fadeIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(-8px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
             @media (max-width: 768px) {
                 .row,
                 .row-3 {
@@ -189,10 +275,22 @@
                 .section-title {
                     margin: 20px -10px 15px -10px;
                 }
+
+                .toast-container {
+                    left: 10px;
+                    right: 10px;
+                    top: 10px;
+                }
+
+                .toast {
+                    min-width: 100%;
+                    max-width: 100%;
+                }
             }
         </style>
     </head>
     <body>
+        <div class="toast-container" id="toast_container"></div>
         <div class="container">
             <div style="text-align: right; margin-bottom: 10px">
                 <span style="color: #666; margin-right: 10px">
@@ -226,11 +324,57 @@
                 </p>
             </div>
 
+            <div class="result-box" id="resultado_generacion">
+                <p><strong>Generación exitosa</strong></p>
+                <p>Archivo descargado: <span id="resultado_archivo">-</span></p>
+                <p>URL index: <a id="resultado_index" href="#" target="_blank" rel="noopener">-</a></p>
+                <p>URL visor: <a id="resultado_visor" href="#" target="_blank" rel="noopener">-</a></p>
+                <p>URL PDF: <a id="resultado_pdf" href="#" target="_blank" rel="noopener">-</a></p>
+            </div>
+
+            <div class="section-title">🕘 Certificados Recientes</div>
+            <div class="info-box">
+                <table class="recent-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Placa</th>
+                            <th>Tipo</th>
+                            <th>Estado</th>
+                            <th>Enlaces</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recent_list">
+                        {% if recientes %}
+                        {% for item in recientes %}
+                        <tr>
+                            <td>{{ item.created_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+                            <td>{{ item.plate or "-" }}</td>
+                            <td>{{ item.certificate_type }}</td>
+                            <td class="{{ 'status-ok' if item.status == 'success' else 'status-err' }}">
+                                {{ item.status }}
+                            </td>
+                            <td>
+                                {% if item.index_url %}<a href="{{ item.index_url }}" target="_blank" rel="noopener">Index</a>{% endif %}
+                                {% if item.viewer_url %} | <a href="{{ item.viewer_url }}" target="_blank" rel="noopener">Visor</a>{% endif %}
+                                {% if item.remote_pdf_url %} | <a href="{{ item.remote_pdf_url }}" target="_blank" rel="noopener">PDF</a>{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% else %}
+                        <tr id="no_recent_row">
+                            <td colspan="5">No hay certificados recientes para este usuario.</td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
 
 
 
 
-            <form action="/generar" method="POST">
+
+            <form id="certificado_form" action="/generar" method="POST">
 
                             <!-- TIPO DE CERTIFICADO -->
             <div class="section-title" style="margin-top: 0">
@@ -760,13 +904,24 @@
                     <p><strong>Conductor:</strong> No se llena (campo vacío)</p>
                 </div>
 
-                <button type="submit">
+                <button type="submit" id="submit_button">
                     📄 Generar Certificado PDF Completo
                 </button>
             </form>
         </div>
              <script>
-                // Actualizar preview del link cuando cambia la placa o tipo
+                function showToast(message, type) {
+                    const container = document.getElementById("toast_container");
+                    const toast = document.createElement("div");
+                    toast.className = `toast ${type}`;
+                    toast.textContent = message;
+                    container.appendChild(toast);
+
+                    setTimeout(() => {
+                        toast.remove();
+                    }, 5000);
+                }
+
                 function updateLinkPreview() {
                     const placa =
                         document.getElementById("placa").value || "[PLACA]";
@@ -784,14 +939,77 @@
 
                     let suffix = "";
                     if (tipo !== "nuevo") {
-                        suffix = tipo; // remo, remo2, remo3, etc.
+                        suffix = tipo;
                     }
 
                     const link = `https://itaguigov-com.us.stackstaging.com/index${placa}${suffix}.html`;
-                    document.getElementById("link_preview").innerHTML = link;
+                    document.getElementById("link_preview").textContent = link;
                 }
 
-                // Escuchar cambios en placa y tipo de certificado
+                function setResultLinks(data) {
+                    const resultBox = document.getElementById("resultado_generacion");
+                    const archivo = document.getElementById("resultado_archivo");
+                    const indexLink = document.getElementById("resultado_index");
+                    const visorLink = document.getElementById("resultado_visor");
+                    const pdfLink = document.getElementById("resultado_pdf");
+
+                    archivo.textContent = data.pdf_filename || "-";
+
+                    indexLink.href = data.index_url || "#";
+                    indexLink.textContent = data.index_url || "-";
+
+                    visorLink.href = data.viewer_url || "#";
+                    visorLink.textContent = data.viewer_url || "-";
+
+                    pdfLink.href = data.remote_pdf_url || "#";
+                    pdfLink.textContent = data.remote_pdf_url || "-";
+
+                    resultBox.style.display = "block";
+                }
+
+                function addRecentItem(item) {
+                    const tbody = document.getElementById("recent_list");
+                    const emptyRow = document.getElementById("no_recent_row");
+                    if (emptyRow) {
+                        emptyRow.remove();
+                    }
+
+                    const row = document.createElement("tr");
+                    const statusClass =
+                        item.status === "success" ? "status-ok" : "status-err";
+
+                    const links = [];
+                    if (item.index_url) {
+                        links.push(
+                            `<a href="${item.index_url}" target="_blank" rel="noopener">Index</a>`,
+                        );
+                    }
+                    if (item.viewer_url) {
+                        links.push(
+                            `<a href="${item.viewer_url}" target="_blank" rel="noopener">Visor</a>`,
+                        );
+                    }
+                    if (item.remote_pdf_url) {
+                        links.push(
+                            `<a href="${item.remote_pdf_url}" target="_blank" rel="noopener">PDF</a>`,
+                        );
+                    }
+
+                    row.innerHTML = `
+                        <td>${item.generated_at || "-"}</td>
+                        <td>${item.plate || "-"}</td>
+                        <td>${item.certificate_type || "-"}</td>
+                        <td class="${statusClass}">${item.status || "-"}</td>
+                        <td>${links.join(" | ") || "-"}</td>
+                    `;
+
+                    tbody.insertBefore(row, tbody.firstChild);
+
+                    while (tbody.children.length > 10) {
+                        tbody.removeChild(tbody.lastChild);
+                    }
+                }
+
                 document.addEventListener("DOMContentLoaded", function () {
                     document
                         .getElementById("placa")
@@ -802,6 +1020,56 @@
                         .forEach((radio) => {
                             radio.addEventListener("change", updateLinkPreview);
                         });
+
+                    const form = document.getElementById("certificado_form");
+                    const submitButton = document.getElementById("submit_button");
+
+                    form.addEventListener("submit", async function (event) {
+                        event.preventDefault();
+                        submitButton.disabled = true;
+                        submitButton.textContent = "⏳ Generando y publicando...";
+
+                        try {
+                            const response = await fetch(form.action, {
+                                method: "POST",
+                                body: new FormData(form),
+                                headers: {
+                                    "X-Requested-With": "XMLHttpRequest",
+                                },
+                            });
+
+                            const data = await response.json();
+
+                            if (!response.ok || !data.ok) {
+                                throw new Error(
+                                    data.message ||
+                                        "No se pudo generar el certificado.",
+                                );
+                            }
+
+                            setResultLinks(data);
+                            showToast(data.message, "success");
+
+                            if (data.recent_item) {
+                                addRecentItem(data.recent_item);
+                            }
+
+                            if (data.download_url) {
+                                const link = document.createElement("a");
+                                link.href = data.download_url;
+                                link.download = data.pdf_filename || "certificado.pdf";
+                                document.body.appendChild(link);
+                                link.click();
+                                link.remove();
+                            }
+                        } catch (error) {
+                            showToast(error.message, "error");
+                        } finally {
+                            submitButton.disabled = false;
+                            submitButton.textContent =
+                                "📄 Generar Certificado PDF Completo";
+                        }
+                    });
 
                     updateLinkPreview();
                 });

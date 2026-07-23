@@ -4,9 +4,10 @@ from datetime import datetime
 from ftplib import FTP
 from io import BytesIO
 from pathlib import Path
+from urllib.parse import quote
 
 import qrcode
-from flask import Flask, render_template, request, send_file
+from flask import Flask, jsonify, render_template, request, send_file, send_from_directory, url_for
 from flask_login import (
     LoginManager,
     current_user,
@@ -23,7 +24,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
 from auth import auth
-from models import User, db
+from models import GenerationAudit, User, db
 
 load_dotenv()
 print("DATABASE_URL =", os.getenv("DATABASE_URL"))
@@ -59,6 +60,12 @@ def load_user(user_id):
 
 
 app.register_blueprint(auth)
+
+with app.app_context():
+    try:
+        db.create_all()
+    except Exception as exc:
+        print("WARN: no se pudieron crear tablas automáticamente:", exc)
 
 env = Environment(loader=FileSystemLoader("templates"), autoescape=False)
 
@@ -405,15 +412,15 @@ def generar_certificado(datos):
         os.remove(qr_overlay_path)
 
         # Publicar en web
-        ok, mensaje = publicar_certificado_web(datos, ruta_salida)
+        ok, publicacion = publicar_certificado_web(datos, ruta_salida)
 
         if not ok:
-            return None, f"Error FTP: {mensaje}"
+            return None, f"Error FTP: {publicacion}", None
 
-        return ruta_salida, None
+        return ruta_salida, None, publicacion
 
     except Exception as e:
-        return None, str(e)
+        return None, str(e), None
 
 
 def publicar_certificado_web(datos, ruta_pdf):
@@ -496,12 +503,21 @@ def publicar_certificado_web(datos, ruta_pdf):
 
         ftp.quit()
 
-        return True, f"""✅ Certificado publicado correctamente.
+        base_publica = "https://itaguigov-com.us.stackstaging.com"
+        carpeta_visor = quote("___ Busqueda de certificados electronicos __._files")
 
-PDF: {placa}{sufijo}.pdf
-HTML: {placa}{sufijo}.html
-INDEX: index{placa}{sufijo}.html
-"""
+        pdf_filename = f"{placa}{sufijo}.pdf"
+        viewer_filename = f"{placa}{sufijo}.html"
+        index_filename = f"index{placa}{sufijo}.html"
+
+        return True, {
+            "pdf_filename": pdf_filename,
+            "viewer_filename": viewer_filename,
+            "index_filename": index_filename,
+            "index_url": f"{base_publica}/{index_filename}",
+            "viewer_url": f"{base_publica}/{carpeta_visor}/{quote(viewer_filename)}",
+            "remote_pdf_url": f"{base_publica}/{carpeta_visor}/{quote(pdf_filename)}",
+        }
 
     except Exception as e:
         return False, str(e)
@@ -511,7 +527,19 @@ INDEX: index{placa}{sufijo}.html
 @login_required
 def index():
     """Página principal con el formulario"""
-    return render_template("index.html", user=current_user)
+    recientes = (
+        GenerationAudit.query.filter_by(user_id=current_user.id)
+        .order_by(GenerationAudit.created_at.desc())
+        .limit(10)
+        .all()
+    )
+    return render_template("index.html", user=current_user, recientes=recientes)
+
+
+@app.route("/descargar/<path:filename>")
+@login_required
+def descargar_generado(filename):
+    return send_from_directory("generados", filename, as_attachment=True)
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -593,18 +621,59 @@ def generar():
         "clase_otro_especifique": request.form.get("clase_otro_especifique", ""),
     }
 
-    ruta_pdf, error = generar_certificado(datos)
+    ruta_pdf, error, publicacion = generar_certificado(datos)
 
     if error:
-        return f"Error al generar el certificado: {error}", 500
+        audit_error = GenerationAudit(
+            user_id=current_user.id,
+            plate=placa_archivos,
+            certificate_type=tipo_certificado,
+            status="error",
+            message=error,
+        )
+        db.session.add(audit_error)
+        db.session.commit()
 
-    return f"""
-<h2>✅ Certificado generado correctamente</h2>
+        return jsonify({"ok": False, "message": f"Error al generar el certificado: {error}"}), 500
 
-<p><b>Archivo:</b> {os.path.basename(ruta_pdf)}</p>
+    pdf_filename = os.path.basename(ruta_pdf)
+    descarga_url = url_for("descargar_generado", filename=pdf_filename)
 
-<p>El PDF se generó y el FTP respondió correctamente.</p>
-"""
+    audit_ok = GenerationAudit(
+        user_id=current_user.id,
+        plate=placa_archivos,
+        certificate_type=tipo_certificado,
+        status="success",
+        message="Certificado generado y publicado correctamente",
+        pdf_filename=pdf_filename,
+        index_url=publicacion.get("index_url") if publicacion else None,
+        viewer_url=publicacion.get("viewer_url") if publicacion else None,
+        remote_pdf_url=publicacion.get("remote_pdf_url") if publicacion else None,
+    )
+    db.session.add(audit_ok)
+    db.session.commit()
+
+    return jsonify(
+        {
+            "ok": True,
+            "message": "Certificado generado y publicado correctamente.",
+            "download_url": descarga_url,
+            "pdf_filename": pdf_filename,
+            "index_url": publicacion.get("index_url") if publicacion else None,
+            "viewer_url": publicacion.get("viewer_url") if publicacion else None,
+            "remote_pdf_url": publicacion.get("remote_pdf_url") if publicacion else None,
+            "generated_at": audit_ok.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            "recent_item": {
+                "plate": audit_ok.plate,
+                "certificate_type": audit_ok.certificate_type,
+                "status": audit_ok.status,
+                "generated_at": audit_ok.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                "index_url": audit_ok.index_url,
+                "viewer_url": audit_ok.viewer_url,
+                "remote_pdf_url": audit_ok.remote_pdf_url,
+            },
+        }
+    )
 
 
 ## **3. Agrega el campo en LibreOffice Draw:**
