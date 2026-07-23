@@ -179,6 +179,11 @@ def _normalize_key(value):
     return re.sub(r"[^a-z0-9]+", "", _normalize_text(value).lower())
 
 
+def _alias_pattern(alias):
+    # Evita falsos positivos tipo "nit" dentro de "sanitaria".
+    return re.compile(rf"(?:^|\b){re.escape(alias)}(?:\b)\s*:?(.*)$", re.I)
+
+
 def _extract_form_fields(reader):
     fields = {}
     raw_fields = reader.get_fields() or {}
@@ -194,11 +199,13 @@ def _extract_form_fields(reader):
 
 def _extract_value_from_lines(page_text, aliases):
     lines = [_normalize_text(line) for line in page_text.splitlines() if _normalize_text(line)]
-    regexes = [re.compile(rf"{re.escape(alias)}\s*:?(.*)$", re.I) for alias in aliases]
+    regexes = [_alias_pattern(alias) for alias in aliases]
+
+    normalized_aliases = [_normalize_key(alias) for alias in aliases]
 
     def looks_like_label(line):
         normalized_line = _normalize_key(line)
-        return any(_normalize_key(alias) in normalized_line for alias in aliases)
+        return any(normalized_line.startswith(alias) for alias in normalized_aliases)
 
     for idx, line in enumerate(lines):
         for regex in regexes:
@@ -221,7 +228,7 @@ def _extract_semantic_value(form_fields, page_texts, aliases):
 
     for field_name, field_value in form_fields.items():
         normalized_name = _normalize_key(field_name)
-        if any(alias in normalized_name for alias in alias_keys):
+        if any(normalized_name == alias or normalized_name.startswith(alias) for alias in alias_keys):
             if field_value:
                 return field_value
 
@@ -233,12 +240,62 @@ def _extract_semantic_value(form_fields, page_texts, aliases):
     return ""
 
 
+def _clean_extracted_value(field_name, value):
+    value = _normalize_text(value)
+    if not value:
+        return ""
+
+    # Quitar prefijos de etiqueta si vienen dentro del valor.
+    prefixes = {
+        "marca": ["marca"],
+        "modelo": ["modelo"],
+        "color": ["color"],
+        "capacidad": ["capacidad"],
+        "persona": ["persona", "nombre del propietario"],
+        "nit": ["nit", "numero de documento", "número de documento"],
+        "codigo_verificacion": ["codigo de verificacion", "código de verificación"],
+        "tipo_transporte": ["tipo de transporte", "tipo de alimento transportado"],
+        "ciudad": ["ciudad", "municipio"],
+        "departamento": ["departamento"],
+        "direccion_notificacion": ["direccion de notificacion", "dirección de notificación"],
+        "telefono": ["telefonos", "teléfono", "telefono"],
+        "correo_electronico": ["correo electronico", "correo electrónico"],
+    }
+    normalized = _normalize_key(value)
+    for prefix in prefixes.get(field_name, []):
+        prefix_norm = _normalize_key(prefix)
+        if normalized.startswith(prefix_norm):
+            value = re.sub(rf"^{re.escape(prefix)}\s*:?\s*", "", value, flags=re.I).strip()
+            break
+
+    # Cortes defensivos para no arrastrar campos siguientes.
+    stop_tokens = {
+        "marca": ["MODELO", "COLOR", "CAPACIDAD"],
+        "modelo": ["COLOR", "CAPACIDAD", "PERSONA"],
+        "color": ["CAPACIDAD", "PERSONA", "NIT"],
+        "capacidad": ["PERSONA", "NIT", "CODIGO"],
+        "persona": ["NIT", "CODIGO", "PLACA"],
+        "nit": ["CODIGO", "PLACA", "NUMERO DE INSPECCION"],
+        "tipo_transporte": ["SISTEMA DE REFRIGERACION", "SISTEMA DE REFRIGERACIÓN"],
+        "telefono": ["CORREO", "DIRECCION", "DIRECCIÓN"],
+    }
+
+    upper_value = value.upper()
+    for token in stop_tokens.get(field_name, []):
+        idx = upper_value.find(token)
+        if idx > 0:
+            value = value[:idx].strip(" :-")
+            upper_value = value.upper()
+
+    return value
+
+
 def _parse_autocomplete_pdf(pdf_path):
     reader = PdfReader(pdf_path)
     form_fields = _extract_form_fields(reader)
     page_texts = [(page.extract_text() or "") for page in reader.pages]
 
-    return {
+    data = {
         "placa": _extract_semantic_value(form_fields, page_texts, ["Placa", "Placa del Vehículo"]),
         "marca": _extract_semantic_value(form_fields, page_texts, ["Marca"]),
         "modelo": _extract_semantic_value(form_fields, page_texts, ["Modelo"]),
@@ -284,6 +341,11 @@ def _parse_autocomplete_pdf(pdf_path):
             ["Clase del vehículo", "Clase del Vehículo"],
         ),
     }
+
+    for key in list(data.keys()):
+        data[key] = _clean_extracted_value(key, data.get(key, ""))
+
+    return data
 
 
 def _list_remote_files(ftp, remote_path):
