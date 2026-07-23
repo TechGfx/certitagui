@@ -234,6 +234,28 @@ def _extract_date_iso(text):
     return ""
 
 
+def _extract_labeled_value(text, label, next_labels):
+    """Extrae el valor entre una etiqueta y la siguiente etiqueta conocida."""
+    if not text:
+        return ""
+
+    next_pattern = "|".join(re.escape(item) for item in next_labels)
+    pattern = (
+        rf"{re.escape(label)}\s*:?[ \t]*"
+        rf"(.+?)"
+        rf"(?=\s*(?:{next_pattern})\s*:|$)"
+    )
+    match = re.search(pattern, text, flags=re.I | re.S)
+    if not match:
+        return ""
+
+    value = _normalize_text(match.group(1))
+    # Si quedó solo la misma etiqueta por mala lectura, no usar.
+    if _normalize_key(value) == _normalize_key(label):
+        return ""
+    return value
+
+
 def _extract_value_from_lines(page_text, aliases):
     lines = [_normalize_text(line) for line in page_text.splitlines() if _normalize_text(line)]
     regexes = [_alias_pattern(alias) for alias in aliases]
@@ -440,6 +462,49 @@ def _parse_autocomplete_pdf(pdf_path):
 
     if not data["fecha_inspeccion"]:
         data["fecha_inspeccion"] = _extract_date_iso(page1) or _extract_date_iso(page2)
+
+    # Fallback final: bloque de etiquetas de la página 1 del certificado.
+    page1_labels = [
+        "Placa",
+        "Marca",
+        "Modelo",
+        "Color",
+        "Capacidad",
+        "Persona",
+        "Nit",
+        "Código de verificación",
+        "Codigo de verificacion",
+    ]
+
+    if not data["placa"]:
+        data["placa"] = _extract_labeled_value(page1, "Placa", page1_labels)
+    if not data["marca"]:
+        data["marca"] = _extract_labeled_value(page1, "Marca", page1_labels)
+    if not data["modelo"]:
+        data["modelo"] = _extract_labeled_value(page1, "Modelo", page1_labels)
+    if not data["color"]:
+        data["color"] = _extract_labeled_value(page1, "Color", page1_labels)
+    if not data["capacidad"]:
+        data["capacidad"] = _extract_labeled_value(page1, "Capacidad", page1_labels)
+    if not data["persona"]:
+        data["persona"] = _extract_labeled_value(page1, "Persona", page1_labels)
+    if not data["nit"]:
+        data["nit"] = _extract_labeled_value(page1, "Nit", page1_labels)
+    if not data["codigo_verificacion"]:
+        data["codigo_verificacion"] = _extract_labeled_value(
+            page1,
+            "Código de verificación",
+            page1_labels,
+        ) or _extract_labeled_value(page1, "Codigo de verificacion", page1_labels)
+
+    if not data["tipo_transporte"]:
+        data["tipo_transporte"] = _first_regex_group(
+            page1,
+            [
+                r"para\s+el\s+transporte\s+de\s+(.+?)\s+Esta\s+certificaci[óo]n",
+                r"para\s+el\s+transporte\s+de\s+(.+?)\s+De\s+conformidad",
+            ],
+        )
 
     # Limpieza final y guardrails: no aceptar valores contaminados por etiquetas.
     for key in list(data.keys()):
