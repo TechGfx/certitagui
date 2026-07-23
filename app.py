@@ -1,5 +1,7 @@
 import os
 import random
+import re
+import tempfile
 from datetime import datetime
 from ftplib import FTP
 from io import BytesIO
@@ -73,6 +75,8 @@ Path("build").mkdir(exist_ok=True)
 
 os.makedirs("generados", exist_ok=True)
 os.makedirs("instance", exist_ok=True)
+
+CERTIFICATE_SUFFIXES = ["remo5", "remo4", "remo3", "remo2", "remo", ""]
 
 
 def normalizar_placa(placa):
@@ -165,6 +169,201 @@ def serializar_autocompletado(vehicle):
         "ciudad": owner.city if owner else "",
         "departamento": owner.department if owner else "",
     }
+
+
+def _normalize_text(value):
+    return re.sub(r"\s+", " ", (value or "")).strip()
+
+
+def _normalize_key(value):
+    return re.sub(r"[^a-z0-9]+", "", _normalize_text(value).lower())
+
+
+def _extract_form_fields(reader):
+    fields = {}
+    raw_fields = reader.get_fields() or {}
+    for field_name, field_data in raw_fields.items():
+        if not field_data:
+            continue
+        field_value = field_data.get("/V")
+        if field_value is None:
+            continue
+        fields[str(field_name)] = _normalize_text(str(field_value))
+    return fields
+
+
+def _extract_value_from_lines(page_text, aliases):
+    lines = [_normalize_text(line) for line in page_text.splitlines() if _normalize_text(line)]
+    regexes = [re.compile(rf"{re.escape(alias)}\s*:?(.*)$", re.I) for alias in aliases]
+
+    def looks_like_label(line):
+        normalized_line = _normalize_key(line)
+        return any(_normalize_key(alias) in normalized_line for alias in aliases)
+
+    for idx, line in enumerate(lines):
+        for regex in regexes:
+            match = regex.search(line)
+            if not match:
+                continue
+
+            inline_value = _normalize_text(match.group(1))
+            if inline_value:
+                return inline_value
+
+            for next_line in lines[idx + 1 : idx + 4]:
+                if next_line and not looks_like_label(next_line):
+                    return next_line
+    return ""
+
+
+def _extract_semantic_value(form_fields, page_texts, aliases):
+    alias_keys = [_normalize_key(alias) for alias in aliases]
+
+    for field_name, field_value in form_fields.items():
+        normalized_name = _normalize_key(field_name)
+        if any(alias in normalized_name for alias in alias_keys):
+            if field_value:
+                return field_value
+
+    for page_text in page_texts:
+        value = _extract_value_from_lines(page_text, aliases)
+        if value:
+            return value
+
+    return ""
+
+
+def _parse_autocomplete_pdf(pdf_path):
+    reader = PdfReader(pdf_path)
+    form_fields = _extract_form_fields(reader)
+    page_texts = [(page.extract_text() or "") for page in reader.pages]
+
+    return {
+        "placa": _extract_semantic_value(form_fields, page_texts, ["Placa", "Placa del Vehículo"]),
+        "marca": _extract_semantic_value(form_fields, page_texts, ["Marca"]),
+        "modelo": _extract_semantic_value(form_fields, page_texts, ["Modelo"]),
+        "color": _extract_semantic_value(form_fields, page_texts, ["Color"]),
+        "capacidad": _extract_semantic_value(form_fields, page_texts, ["Capacidad"]),
+        "persona": _extract_semantic_value(
+            form_fields,
+            page_texts,
+            ["Persona", "Nombre del propietario", "Nombre del Propietario"],
+        ),
+        "nit": _extract_semantic_value(form_fields, page_texts, ["Nit", "NIT", "Número de documento"]),
+        "codigo_verificacion": _extract_semantic_value(
+            form_fields,
+            page_texts,
+            ["Código de verificación", "Código de Verificación"],
+        ),
+        "tipo_transporte": _extract_semantic_value(
+            form_fields,
+            page_texts,
+            ["Tipo de transporte", "Tipo de alimento transportado", "Tipo de Alimento Transportado"],
+        ),
+        "ciudad": _extract_semantic_value(form_fields, page_texts, ["Ciudad", "Ciudad (Municipio)", "Municipio"]),
+        "departamento": _extract_semantic_value(form_fields, page_texts, ["Departamento"]),
+        "direccion_notificacion": _extract_semantic_value(
+            form_fields,
+            page_texts,
+            ["Dirección de notificación", "Dirección de Notificación"],
+        ),
+        "telefono": _extract_semantic_value(form_fields, page_texts, ["Teléfonos", "Telefono", "Teléfono"]),
+        "correo_electronico": _extract_semantic_value(
+            form_fields,
+            page_texts,
+            ["Correo electrónico del propietario", "Correo Electrónico del Propietario", "Correo Electrónico"],
+        ),
+        "sistema_refrigeracion": _extract_semantic_value(
+            form_fields,
+            page_texts,
+            ["Sistema de refrigeración", "Sistema de Refrigeración"],
+        ),
+        "clase_vehiculo": _extract_semantic_value(
+            form_fields,
+            page_texts,
+            ["Clase del vehículo", "Clase del Vehículo"],
+        ),
+    }
+
+
+def _list_remote_files(ftp, remote_path):
+    current_dir = ftp.pwd()
+    try:
+        ftp.cwd(remote_path)
+        return ftp.nlst()
+    finally:
+        ftp.cwd(current_dir)
+
+
+def buscar_autocompletado_en_ftp(placa_norm):
+    from ftp_config import FTP_BASE, FTP_HOST, FTP_PASS, FTP_USER, FTP_VISOR
+
+    base_publica = "https://itaguigov-com.us.stackstaging.com"
+    carpeta_visor = quote("___ Busqueda de certificados electronicos __._files")
+
+    ftp = FTP(FTP_HOST, timeout=45)
+    ftp.login(user=FTP_USER, passwd=FTP_PASS)
+
+    try:
+        root_files = set(_list_remote_files(ftp, FTP_BASE))
+        visor_files = set(_list_remote_files(ftp, FTP_VISOR))
+
+        selected = None
+        for suffix in CERTIFICATE_SUFFIXES:
+            key = f"{placa_norm}{suffix}"
+            index_file = f"index{key}.html"
+            viewer_file = f"{key}.html"
+            pdf_file = f"{key}.pdf"
+
+            if index_file in root_files and pdf_file in visor_files:
+                selected = (key, suffix or "nuevo", index_file, viewer_file, pdf_file)
+                break
+
+        if selected is None:
+            for suffix in CERTIFICATE_SUFFIXES:
+                key = f"{placa_norm}{suffix}"
+                pdf_file = f"{key}.pdf"
+                if pdf_file in visor_files:
+                    selected = (
+                        key,
+                        suffix or "nuevo",
+                        f"index{key}.html",
+                        f"{key}.html",
+                        pdf_file,
+                    )
+                    break
+
+        if selected is None:
+            return None, None
+
+        cert_key, cert_type, index_file, viewer_file, pdf_file = selected
+        remote_pdf_path = f"{FTP_VISOR.rstrip('/')}/{pdf_file}"
+
+        temp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+                temp_path = temp_file.name
+                ftp.retrbinary(f"RETR {remote_pdf_path}", temp_file.write)
+
+            parsed = _parse_autocomplete_pdf(temp_path)
+            parsed["placa"] = parsed.get("placa") or placa_norm
+            parsed["tipo_certificado"] = cert_type
+
+            payload = {
+                "data": parsed,
+                "index_url": f"{base_publica}/{index_file}",
+                "viewer_url": f"{base_publica}/{carpeta_visor}/{quote(viewer_file)}",
+                "remote_pdf_url": f"{base_publica}/{carpeta_visor}/{quote(pdf_file)}",
+                "certificate_key": cert_key,
+            }
+            return payload, None
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                os.remove(temp_path)
+    except Exception as exc:
+        return None, str(exc)
+    finally:
+        ftp.quit()
 
 
 def dividir_tipo_transporte(texto, palabras_linea1=3):
@@ -641,23 +840,28 @@ def autocompletar_por_placa(placa):
     if not placa_norm:
         return jsonify({"ok": False, "message": "Placa inválida"}), 400
 
-    vehicle = VehicleProfile.query.filter_by(plate=placa_norm).first()
-    if vehicle is None:
-        return (
-            jsonify(
-                {
-                    "ok": False,
-                    "message": f"No hay datos guardados para la placa {placa_norm}.",
-                }
-            ),
-            404,
+    payload, error = buscar_autocompletado_en_ftp(placa_norm)
+    if error:
+        return jsonify({"ok": False, "message": f"Error consultando FTP: {error}"}), 500
+
+    if payload is None:
+        return jsonify(
+            {
+                "ok": False,
+                "message": f"No se encontró certificado remoto para la placa {placa_norm}.",
+            }
         )
 
     return jsonify(
         {
             "ok": True,
-            "message": f"Datos encontrados para la placa {placa_norm}.",
-            "data": serializar_autocompletado(vehicle),
+            "message": f"Datos cargados desde FTP para la placa {placa_norm}.",
+            "source": "ftp",
+            "data": payload["data"],
+            "index_url": payload["index_url"],
+            "viewer_url": payload["viewer_url"],
+            "remote_pdf_url": payload["remote_pdf_url"],
+            "certificate_key": payload["certificate_key"],
         }
     )
 

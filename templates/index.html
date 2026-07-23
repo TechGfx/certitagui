@@ -976,6 +976,17 @@
                     resultBox.style.display = "block";
                 }
 
+                function setResultLinksFromAutocomplete(payload) {
+                    setResultLinks({
+                        pdf_filename: payload.certificate_key
+                            ? `${payload.certificate_key}.pdf`
+                            : "-",
+                        index_url: payload.index_url,
+                        viewer_url: payload.viewer_url,
+                        remote_pdf_url: payload.remote_pdf_url,
+                    });
+                }
+
                 function applyAutocompleteData(data) {
                     const fields = [
                         "marca",
@@ -1074,7 +1085,11 @@
                     }
                 }
 
-                async function buscarAutocompletadoPorPlaca() {
+                let autocompleteInFlight = false;
+                let lastAutocompletePlate = "";
+
+                async function buscarAutocompletadoPorPlaca(options = {}) {
+                    const { silentNotFound = false } = options;
                     const placaInput = document.getElementById("placa");
                     const buscarPlacaBtn = document.getElementById("buscar_placa_btn");
                     const placa = placaInput.value.trim().toUpperCase();
@@ -1084,6 +1099,16 @@
                         placaInput.focus();
                         return;
                     }
+
+                    if (autocompleteInFlight) {
+                        return;
+                    }
+
+                    if (silentNotFound && placa === lastAutocompletePlate) {
+                        return;
+                    }
+
+                    autocompleteInFlight = true;
 
                     const originalLabel = buscarPlacaBtn
                         ? buscarPlacaBtn.textContent
@@ -1108,17 +1133,23 @@
                         const payload = await response.json();
 
                         if (!response.ok || !payload.ok) {
-                            throw new Error(
-                                payload.message ||
-                                    "No se encontraron datos para esa placa.",
-                            );
+                            if (!silentNotFound) {
+                                throw new Error(
+                                    payload.message ||
+                                        "No se encontraron datos para esa placa.",
+                                );
+                            }
+                            return;
                         }
 
+                        lastAutocompletePlate = placa;
                         applyAutocompleteData(payload.data || {});
+                        setResultLinksFromAutocomplete(payload);
                         showToast(payload.message, "success");
                     } catch (error) {
                         showToast(error.message, "error");
                     } finally {
+                        autocompleteInFlight = false;
                         if (buscarPlacaBtn) {
                             buscarPlacaBtn.disabled = false;
                             buscarPlacaBtn.textContent = originalLabel;
@@ -1148,7 +1179,7 @@
                     const placaInput = document.getElementById("placa");
                     placaInput.addEventListener("blur", function () {
                         if (placaInput.value.trim()) {
-                            buscarAutocompletadoPorPlaca();
+                            buscarAutocompletadoPorPlaca({ silentNotFound: true });
                         }
                     });
                     placaInput.addEventListener("keydown", function (event) {
