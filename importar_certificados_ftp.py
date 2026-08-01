@@ -123,7 +123,7 @@ def extract_pdf_pages(reader: PdfReader) -> list[str]:
 def extract_from_label_lines(page_text: str, aliases: Iterable[str]) -> str:
     lines = [normalize_text(line) for line in page_text.splitlines() if normalize_text(line)]
 
-    compiled_aliases = [re.compile(rf"{re.escape(alias)}\s*:?(.*)$", re.I) for alias in aliases]
+    compiled_aliases = [re.compile(rf"^{re.escape(alias)}\s*:?(.*)$", re.I) for alias in aliases]
 
     def looks_like_label(line: str) -> bool:
         normalized_line = normalize_key(line)
@@ -137,7 +137,11 @@ def extract_from_label_lines(page_text: str, aliases: Iterable[str]) -> str:
 
             inline_value = normalize_text(match.group(1))
             if inline_value:
-                return inline_value
+                # Descarta valores inline que contienen otras etiquetas (evita contaminación)
+                if any(normalize_key(a) in normalize_key(inline_value) for a in aliases):
+                    inline_value = ""
+                else:
+                    return inline_value
 
             for next_line in lines[index + 1 : index + 4]:
                 if next_line and not looks_like_label(next_line):
@@ -153,11 +157,13 @@ def extract_semantic_value(
 ) -> str:
     alias_keys = [normalize_key(alias) for alias in aliases]
 
+    # Prefiere coincidencia exacta de nombre de campo, luego coincidencias por prefijo/sufijo
     for field_name, field_value in form_fields.items():
         normalized_name = normalize_key(field_name)
-        if any(alias in normalized_name for alias in alias_keys):
-            if field_value:
-                return field_value
+        for ak in alias_keys:
+            if normalized_name == ak or normalized_name.startswith(ak) or normalized_name.endswith(ak):
+                if field_value:
+                    return field_value
 
     for page_text in page_texts:
         extracted = extract_from_label_lines(page_text, aliases)
@@ -350,7 +356,24 @@ def import_one_certificate(ftp: FTP, remote: RemoteCertificate, temp_dir: Path, 
     download_remote_file(ftp, pdf_remote_path, pdf_path)
 
     parsed = parse_pdf(pdf_path)
-    parsed["placa"] = parsed.get("placa") or remote.plate
+    if dry_run:
+        print(json.dumps(parsed, ensure_ascii=False, indent=2))
+
+    # Validaciones rápidas: si la placa extraída no parece una placa válida, usar la placa inferida por el nombre de archivo
+    placa_val = (parsed.get("placa") or "").strip()
+    placa_norm = re.sub(r"\s+", "", placa_val).upper()
+    if not re.match(r"^[A-Z0-9]{3,8}$", placa_norm):
+        parsed["placa"] = remote.plate
+
+    # Sanitizar NIT: si la extracción parece un párrafo, intentar extraer el primer grupo numérico razonable
+    nit_val = (parsed.get("nit") or "").strip()
+    if nit_val and len(re.sub(r"\D", "", nit_val)) < 7:
+        m = re.search(r"(\d{6,12})", parsed.get("full_text", ""))
+        if m:
+            parsed["nit"] = m.group(1)
+    if dry_run:
+        print("-- parsed (post-sanitize) --")
+        print(json.dumps(parsed, ensure_ascii=False, indent=2))
 
     party = upsert_party(parsed)
     vehicle = upsert_vehicle(remote.certificate_key, remote.certificate_type, parsed, party)

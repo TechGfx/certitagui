@@ -241,7 +241,7 @@ def _extract_labeled_value(text, label, next_labels):
 
     next_pattern = "|".join(re.escape(item) for item in next_labels)
     pattern = (
-        rf"{re.escape(label)}\s*:?[ \t]*"
+        rf"(?<![A-Z0-9]){re.escape(label)}(?![A-Z0-9])\s*:?[ \t]*"
         rf"(.+?)"
         rf"(?=\s*(?:{next_pattern})\s*:|$)"
     )
@@ -254,6 +254,29 @@ def _extract_labeled_value(text, label, next_labels):
     if _normalize_key(value) == _normalize_key(label):
         return ""
     return value
+
+
+def _sanitize_nit(value):
+    value = _normalize_text(value)
+    if not value:
+        return ""
+
+    # Permite formatos tipo 901425959 o 901425959-1
+    nit_match = re.search(r"\b(\d{6,15}(?:-\d)?)\b", value)
+    if nit_match:
+        return nit_match.group(1)
+
+    # Si no hay estructura numérica válida, se descarta.
+    return ""
+
+
+def _checkbox_value(form_fields, candidate_names):
+    normalized_map = {_normalize_key(k): (v or "") for k, v in form_fields.items()}
+    for name in candidate_names:
+        raw_value = normalized_map.get(_normalize_key(name), "")
+        if str(raw_value).strip().lower() in {"on", "x", "true", "yes", "1"}:
+            return "X"
+    return ""
 
 
 def _extract_value_from_lines(page_text, aliases):
@@ -358,25 +381,36 @@ def _parse_autocomplete_pdf(pdf_path):
     all_text = "\n".join(page_texts)
 
     data = {
-        # Campos base del formulario (exactos)
-        "placa": _form_field_value(form_fields, ["placa", "placa_2"]),
-        "marca": _form_field_value(form_fields, ["marca", "marca_2"]),
-        "modelo": _form_field_value(form_fields, ["modelo", "modelo_2"]),
-        "color": _form_field_value(form_fields, ["color", "color_2"]),
+        # Contrato de campos exactos que me pasaste.
+        "fecha_inspeccion": _form_field_value(form_fields, ["fecha_inspeccion"]),
+        "placa": _form_field_value(form_fields, ["placa"]),
+        "marca": _form_field_value(form_fields, ["marca"]),
+        "modelo": _form_field_value(form_fields, ["modelo"]),
+        "color": _form_field_value(form_fields, ["color"]),
         "capacidad": _form_field_value(form_fields, ["capacidad"]),
-        "persona": _form_field_value(form_fields, ["persona", "persona_2", "nombre_del_propietario"]),
-        "nit": _form_field_value(form_fields, ["nit", "nit_2", "numero_de_documento"]),
+        "persona": _form_field_value(form_fields, ["persona"]),
+        "nit": _form_field_value(form_fields, ["nit"]),
         "codigo_verificacion": _form_field_value(form_fields, ["codigo_verificacion"]),
-        "tipo_transporte": _form_field_value(form_fields, ["tipo_transporte", "tipodealimento"]),
-        "ciudad": _form_field_value(form_fields, ["ciudad", "municipio"]),
-        "departamento": _form_field_value(form_fields, ["departamento"]),
-        "direccion_notificacion": _form_field_value(form_fields, ["direccion_notificacion"]),
-        "telefono": _form_field_value(form_fields, ["telefono", "telefonos"]),
-        "correo_electronico": _form_field_value(form_fields, ["correo_electronico"]),
-        "sistema_refrigeracion": "",
-        "clase_vehiculo": "",
-        "fecha_inspeccion": _form_field_value(form_fields, ["fecha_inspeccion", "fecha_inspeccion2"]),
+        "tipo_transporte": _form_field_value(form_fields, ["tipodetransporte"]),
         "fecha_vencimiento": _form_field_value(form_fields, ["fecha_vencimiento"]),
+        "fecha_acta": _form_field_value(form_fields, ["fecha_acta"]),
+        "numero_inspeccion": _form_field_value(form_fields, ["numero_inspeccion"]),
+        "telefonos": _form_field_value(form_fields, ["telefonos"]),
+        "correo_electronico": _form_field_value(form_fields, ["correo_electronico"]),
+        "direccion_notificacion": _form_field_value(form_fields, ["direccion_notificacion"]),
+        "departamento": _form_field_value(form_fields, ["departamento"]),
+        "ciudad": _form_field_value(form_fields, ["ciudad"]),
+        "fecha_ultima_inspeccion": _form_field_value(form_fields, ["fecha_ultima_inspeccion"]),
+        "clase_camioneta_check": _checkbox_value(form_fields, ["clase_camioneta_check"]),
+        "clase_camion_check": _checkbox_value(form_fields, ["clase_camion_check"]),
+        "clase_moto_check": _checkbox_value(form_fields, ["clase_moto_check"]),
+        "clase_otro_check": _checkbox_value(form_fields, ["clase_otro_check"]),
+        "clase_otro_especifique": _form_field_value(form_fields, ["clase_otro_especifique"]),
+        "sistema_refrigeracion_si_check": _checkbox_value(form_fields, ["sistema_refrigeracion_si_check"]),
+        "sistema_refrigeracion_no_check": _checkbox_value(
+            form_fields,
+            ["sistema_refrigeracion_no_check", "sistema_refrigeración_no_check"],
+        ),
     }
 
     # Fallback regex estricto: prioriza la página 2 para evitar texto legal de la página 1.
@@ -522,6 +556,9 @@ def _parse_autocomplete_pdf(pdf_path):
         hits = sum(1 for token in contamination_tokens if token in upper)
         if hits >= 2:
             cleaned = ""
+
+        if key == "nit":
+            cleaned = _sanitize_nit(cleaned)
 
         data[key] = cleaned
 
