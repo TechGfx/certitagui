@@ -1003,6 +1003,9 @@
                         "direccion_notificacion",
                         "telefono",
                         "correo_electronico",
+                        // Fechas
+                        "fecha_inspeccion",
+                        "fecha_vencimiento",
                     ];
 
                     const synonyms = {
@@ -1030,8 +1033,36 @@
                             }
                         }
 
-                        // Always set the input (overwrite existing) so the UI reflects the fetched state
-                        input.value = val;
+                        // Normalize some fields before setting
+                        if (field === "capacidad" && val) {
+                            // Try to standardize capacity like '7.0 TONELADAS' or '2.4 TONELADAS'
+                            let m = val.match(/(\d+[\.,]?\d*)\s*TONEL/i);
+                            if (m) {
+                                // prefer decimal with dot
+                                const num = m[1].replace(',', '.');
+                                val = `${num} TONELADAS`;
+                            } else {
+                                // collapse multiple spaces
+                                val = val.replace(/\s+/g, ' ').trim();
+                            }
+                        }
+
+                        if ((field === "fecha_inspeccion" || field === "fecha_vencimiento") && val) {
+                            // Convert possible formats to YYYY-MM-DD for date inputs
+                            // Accepts YYYY-MM-DD or DD/MM/YYYY
+                            let iso = val;
+                            const dmy = val.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                            if (dmy) {
+                                const dd = dmy[1].padStart(2, '0');
+                                const mm = dmy[2].padStart(2, '0');
+                                const yyyy = dmy[3];
+                                iso = `${yyyy}-${mm}-${dd}`;
+                            }
+                            input.value = iso;
+                        } else {
+                            // Always set the input (overwrite existing) so the UI reflects the fetched state
+                            input.value = val;
+                        }
                     });
 
                     if (data.sistema_refrigeracion) {
@@ -1043,6 +1074,18 @@
                         }
                     }
 
+                    // Compat: algunos parsers retornan flags tipo 'sistema_refrigeracion_si_check' o
+                    // 'sistema_refrigeracion_no_check' en lugar de 'sistema_refrigeracion'. Mapearlos.
+                    if (!data.sistema_refrigeracion) {
+                        if (data.sistema_refrigeracion_si_check) {
+                            const r = document.querySelector('input[name="sistema_refrigeracion"][value="SI"]');
+                            if (r) r.checked = true;
+                        } else if (data.sistema_refrigeracion_no_check) {
+                            const r = document.querySelector('input[name="sistema_refrigeracion"][value="NO"]');
+                            if (r) r.checked = true;
+                        }
+                    }
+
                     if (data.clase_vehiculo) {
                         const radio = document.querySelector(
                             `input[name="clase_vehiculo"][value="${data.clase_vehiculo}"]`,
@@ -1050,6 +1093,23 @@
                         if (radio) {
                             radio.checked = true;
                             toggleOtroVehiculo();
+                        }
+                    }
+
+                    // Compat: el parser puede devolver flags tipo 'clase_camioneta_check', etc.
+                    if (!data.clase_vehiculo) {
+                        if (data.clase_camioneta_check) {
+                            const r = document.querySelector('input[name="clase_vehiculo"][value="CAMIONETA"]');
+                            if (r) { r.checked = true; toggleOtroVehiculo(); }
+                        } else if (data.clase_camion_check) {
+                            const r = document.querySelector('input[name="clase_vehiculo"][value="CAMION"]');
+                            if (r) { r.checked = true; toggleOtroVehiculo(); }
+                        } else if (data.clase_moto_check) {
+                            const r = document.querySelector('input[name="clase_vehiculo"][value="MOTO"]');
+                            if (r) { r.checked = true; toggleOtroVehiculo(); }
+                        } else if (data.clase_otro_check) {
+                            const r = document.querySelector('input[name="clase_vehiculo"][value="OTRO"]');
+                            if (r) { r.checked = true; toggleOtroVehiculo(); }
                         }
                     }
 
