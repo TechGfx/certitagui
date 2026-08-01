@@ -396,6 +396,7 @@ def _parse_autocomplete_pdf(pdf_path):
         "fecha_acta": _form_field_value(form_fields, ["fecha_acta"]),
         "numero_inspeccion": _form_field_value(form_fields, ["numero_inspeccion"]),
         "telefonos": _form_field_value(form_fields, ["telefonos"]),
+        "telefono": _form_field_value(form_fields, ["telefonos", "telefono", "teléfono"]),
         "correo_electronico": _form_field_value(form_fields, ["correo_electronico"]),
         "direccion_notificacion": _form_field_value(form_fields, ["direccion_notificacion"]),
         "departamento": _form_field_value(form_fields, ["departamento"]),
