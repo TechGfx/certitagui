@@ -1004,11 +1004,33 @@
                         "correo_electronico",
                     ];
 
+                    const synonyms = {
+                        telefono: ["telefono", "telefonos"],
+                        correo_electronico: ["correo_electronico", "correo", "email"],
+                        tipo_transporte: ["tipo_transporte", "tipodetransporte"],
+                        codigo_verificacion: ["codigo_verificacion", "codigo de verificacion"],
+                        direccion_notificacion: ["direccion_notificacion", "direccion de notificacion"],
+                    };
+
                     fields.forEach((field) => {
                         const input = document.getElementById(field);
-                        if (input && data[field]) {
-                            input.value = data[field];
+                        if (!input) return;
+
+                        let val = "";
+                        // Prefer exact key, then synonyms
+                        if (data.hasOwnProperty(field) && data[field] !== undefined) {
+                            val = data[field] || "";
+                        } else if (synonyms[field]) {
+                            for (const alt of synonyms[field]) {
+                                if (data.hasOwnProperty(alt) && data[alt] !== undefined) {
+                                    val = data[alt] || "";
+                                    break;
+                                }
+                            }
                         }
+
+                        // Always set the input (overwrite existing) so the UI reflects the fetched state
+                        input.value = val;
                     });
 
                     if (data.sistema_refrigeracion) {
