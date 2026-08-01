@@ -1153,6 +1153,7 @@
                         );
 
                         const payload = await response.json();
+                        console.log('Autocomplete payload:', payload);
 
                         if (!response.ok || !payload.ok) {
                             if (!silentNotFound) {

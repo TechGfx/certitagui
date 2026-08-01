@@ -132,6 +132,25 @@ def guardar_perfil_autocompletado(datos):
     vehicle.tipo_transporte = (
         (datos.get("tipo_transporte", "") or "").strip() or vehicle.tipo_transporte
     )
+
+
+@app.route("/_debug/autocompletar/placa/<placa>", methods=["GET"])
+def debug_autocompletar_por_placa(placa):
+    """Ruta de depuración: llama al buscador FTP sin requerir login.
+    Úsala solo para probar desde el navegador: /_debug/autocompletar/placa/PLACA
+    """
+    placa_norm = normalizar_placa(placa)
+    if not placa_norm:
+        return jsonify({"ok": False, "message": "Placa inválida"}), 400
+
+    payload, error = buscar_autocompletado_en_ftp(placa_norm)
+    if error:
+        return jsonify({"ok": False, "message": f"Error consultando FTP: {error}"}), 500
+
+    if payload is None:
+        return jsonify({"ok": False, "message": f"No se encontró certificado remoto para la placa {placa_norm}."})
+
+    return jsonify({"ok": True, "data": payload["data"], "index_url": payload.get("index_url"), "viewer_url": payload.get("viewer_url"), "remote_pdf_url": payload.get("remote_pdf_url"), "certificate_key": payload.get("certificate_key")})
     vehicle.clase_vehiculo = (
         (datos.get("clase_vehiculo", "") or "").strip() or vehicle.clase_vehiculo
     )
