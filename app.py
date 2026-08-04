@@ -1017,12 +1017,13 @@ def publicar_certificado_web(datos, ruta_pdf):
     try:
         placa = datos["placa"]
         tipo_certificado = datos.get("tipo_certificado", "nuevo")
+        archivo_certificado = f"{placa}{'' if tipo_certificado == 'nuevo' else tipo_certificado}"
 
         # =========================
         # Render HTML
         # =========================
         tpl_index = env.get_template("index_certificado.html")
-        html_index = tpl_index.render(**datos)
+        html_index = tpl_index.render(**datos, archivo_certificado=archivo_certificado)
 
         # indexPRY576.html / indexPRY576remo.html / indexPRY576remo2.html ...
         print("\n========== FTP ==========")
@@ -1032,19 +1033,19 @@ def publicar_certificado_web(datos, ruta_pdf):
         sufijo = "" if tipo_certificado == "nuevo" else tipo_certificado
 
         print("Sufijo:", repr(sufijo))
-        print("PDF remoto:", f"{placa}{sufijo}.pdf")
-        print("HTML remoto:", f"{placa}{sufijo}.html")
-        print("INDEX remoto:", f"index{placa}{sufijo}.html")
+        print("PDF remoto:", f"{archivo_certificado}.pdf")
+        print("HTML remoto:", f"{archivo_certificado}.html")
+        print("INDEX remoto:", f"index{archivo_certificado}.html")
         print("=========================\n")
-        index_path = f"build/index{placa}{sufijo}.html"
+        index_path = f"build/index{archivo_certificado}.html"
 
         with open(index_path, "w", encoding="utf-8") as f:
             f.write(html_index)
 
         tpl_visor = env.get_template("visor_pdf.html")
-        html_visor = tpl_visor.render(**datos)
+        html_visor = tpl_visor.render(**datos, archivo_pdf=f"{archivo_certificado}.pdf")
 
-        visor_path = f"build/{placa}{sufijo}.html"
+        visor_path = f"build/{archivo_certificado}.html"
         with open(visor_path, "w", encoding="utf-8") as f:
             f.write(html_visor)
 
@@ -1059,21 +1060,21 @@ def publicar_certificado_web(datos, ruta_pdf):
         # Subir index
         with open(index_path, "rb") as f:
             ftp.storbinary(
-                f"STOR {FTP_BASE}/index{placa}{sufijo}.html",
+                f"STOR {FTP_BASE}/index{archivo_certificado}.html",
                 f,
             )
 
         # Subir visor
         with open(visor_path, "rb") as f:
             ftp.storbinary(
-                f"STOR {FTP_VISOR}/{placa}{sufijo}.html",
+                f"STOR {FTP_VISOR}/{archivo_certificado}.html",
                 f,
             )
 
         # Subir PDF
         with open(ruta_pdf, "rb") as f:
             ftp.storbinary(
-                f"STOR {FTP_VISOR}/{placa}{sufijo}.pdf",
+                f"STOR {FTP_VISOR}/{archivo_certificado}.pdf",
                 f,
             )
 
@@ -1086,7 +1087,7 @@ def publicar_certificado_web(datos, ruta_pdf):
         for archivo in archivos:
             print(" -", archivo)
 
-        if f"{placa}{sufijo}.pdf" in archivos:
+        if f"{archivo_certificado}.pdf" in archivos:
             print("✅ El PDF existe en el FTP")
         else:
             print("❌ El PDF NO existe en el FTP")
